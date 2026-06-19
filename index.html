@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>桃園南崁綜合工作管理系統</title>
   
-  <!-- 原有核心依賴 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
@@ -15,10 +14,8 @@
   <link rel="icon" href="https://drive.google.com/uc?export=view&id=1mrHpfJjvpuwHPDHF41lFlnaygvMwv53Q" type="image/png">
   <link rel="apple-touch-icon" href="https://drive.google.com/uc?export=view&id=1mrHpfJjvpuwHPDHF41lFlnaygvMwv53Q">
   
-  <!-- 🌟 新增視覺特效依賴 (Tailwind, GSAP, Iconify, Anime.js, Three.js, Google Fonts) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // 關閉 Tailwind 的 preflight 避免與原有 Bootstrap 衝突
     tailwind.config = { corePlugins: { preflight: false } }
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -28,9 +25,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;900&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
 
   <style>
-    /* ============================================================ */
-    /* 🔴 原有系統樣式基礎與統一風格化 (BOX 風格與首頁對齊) */
-    /* ============================================================ */
     :root {
       --main-bg-start: #e7eaf6; --main-bg-end: #a2a8d3;
       --btn-consult: #84a59d; --btn-appoint: #a3b18a;
@@ -48,17 +42,15 @@
     .active { display: block; animation: fadeIn 0.4s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-    /* 🔴 新增：隱藏所有 type="number" 輸入框的上下箭頭 */
     input[type="number"]::-webkit-outer-spin-button,
     input[type="number"]::-webkit-inner-spin-button {
       -webkit-appearance: none;
       margin: 0;
     }
     input[type="number"] {
-      -moz-appearance: textfield; /* 針對 Firefox 瀏覽器 */
+      -moz-appearance: textfield; 
     }
     
-    /* 🌟 內部頁面 BOX 統一風格 (與首頁玻璃質感對齊) */
     .card { 
       border-radius: 20px; 
       box-shadow: var(--card-shadow) !important; 
@@ -136,7 +128,6 @@
     .sub-filter-scroll::-webkit-scrollbar { display: none; }
     #loadingOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); display: none; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; color: white; z-index: 9999 !important; }
     
-    /* 修正 Nav Tabs 風格 */
     .nav-tabs-custom { display: flex; background: rgba(91, 42, 48, 0.08); border-radius: 12px; padding: 4px; margin-bottom: 20px; }
     .nav-tabs-custom div { flex: 1; text-align: center; padding: 8px; cursor: pointer; border-radius: 10px; font-weight: bold; transition: 0.3s; color: #5b2a30; opacity: 0.6; }
     .nav-tabs-custom .active-tab { background: rgba(255, 255, 255, 0.9); color: #5b2a30; box-shadow: 0 2px 8px rgba(91, 42, 48, 0.1); opacity: 1; }
@@ -167,22 +158,16 @@
     .card-closed { border-left: 6px solid #28a745 !important; }
     .result-card { transition: transform 0.2s; }
 
-    /* ============================================================ */
-    /* 🌟 樣式 D 專屬擴充：復古文藝質感 (Vintage Artsy) */
-    /* ============================================================ */
     .font-serif-tc { font-family: 'Noto Serif TC', serif; }
     .font-playfair { font-family: 'Playfair Display', serif; }
     
-    /* 膠卷噪點濾鏡 */
     .noise-overlay {
       position: fixed; inset: 0; z-index: 9998; pointer-events: none; opacity: 0.25; mix-blend-mode: multiply;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
     }
 
-    /* 覆寫 #home 為 Landing Page 全幅配置 */
     #home.page { max-width: 100% !important; padding: 0 !important; }
     
-    /* 質感毛玻璃卡片 (首頁矩陣專用) */
     .glass-vintage-card {
       background: rgba(255, 250, 240, 0.65);
       backdrop-filter: blur(12px);
@@ -204,7 +189,6 @@
       }
     }
     
-    /* 返回按鈕風格 */
     .btn-return-home {
       background: rgba(255, 250, 240, 0.8) !important;
       backdrop-filter: blur(5px);
@@ -214,10 +198,8 @@
 </head>
 
 <body>
-  <!-- 全站噪點質感 -->
   <div class="noise-overlay"></div>
 
-  <!-- 系統狀態指示器 -->
   <div class="d-inline-block px-3 py-1 rounded-pill" style="position:fixed; top:10px; left:10px; z-index:9999; background: rgba(217, 202, 35, 0.85); color: #5b2a30; font-size: 0.6rem; letter-spacing: 1.5px; backdrop-filter: blur(4px); box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1); font-family: 'Noto Serif TC', serif;">
     💰八方來財💰 📿阿彌陀佛📿
   </div>
@@ -231,12 +213,7 @@
     <div id="loadingText" class="font-serif-tc text-xl tracking-widest">處理中，請稍候...</div>
   </div>
 
-  <!-- ========================================================== -->
-  <!-- 🌟 全新樣式 D 首頁 (Landing Page: Vintage Artsy) -->
-  <!-- ========================================================== -->
   <div id="home" class="page active relative">
-    
-    <!-- Hero 區塊：縮減高度，讓下方卡片能提早進入視野 -->
     <header class="relative min-h-[40vh] md:min-h-[50vh] flex flex-col justify-center items-center overflow-hidden pb-8">
       <div class="absolute inset-0 z-0 bg-gradient-to-br from-[#e8e2d5] to-[#d8cca8]">
         <img src="https://images.unsplash.com/photo-1558022026-6215321f5ea4?q=80&w=2070&auto=format&fit=crop" 
@@ -247,7 +224,6 @@
         <div class="absolute inset-0 bg-gradient-to-b from-[#F5F0E8] via-transparent to-transparent z-0"></div>
       </div>
 
-      <!-- Hero 內容 -->
       <div class="relative z-10 text-center px-4 max-w-4xl mx-auto pt-16">
         <div class="hero-item inline-block px-3 py-1 border border-[#5b2a30]/30 rounded-full mb-4 md:mb-6">
           <span class="font-serif-tc tracking-[0.3em] text-[#5b2a30] text-[10px] md:text-xs font-bold uppercase">極致品味・精準管理</span>
@@ -261,11 +237,9 @@
       </div>
     </header>
 
-    <!-- 核心功能矩陣 (Grid) - 雙排設計，並套用自訂底色強化記憶點 -->
     <section id="sys-grid" class="relative z-10 px-3 md:px-8 max-w-6xl mx-auto -mt-6 md:-mt-8 pb-20">
       <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-8 overflow-hidden pt-2 px-1">
         
-        <!-- 卡片 1 (諮詢) -->
         <div onclick="showPage('consultation')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-2 lg:col-span-2 group" style="background-color: rgba(132, 165, 157, 0.4); border-color: rgba(132, 165, 157, 0.4);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#5b2a30]/10 flex justify-center items-center mb-2 md:mb-6 text-[#5b2a30] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:notebook-duotone"></iconify-icon>
@@ -274,7 +248,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">建立全新客群檔案，精準紀錄來訪需求與預約時程，開啟優雅服務的第一步。</p>
         </div>
 
-        <!-- 卡片 2 (預約更新) -->
         <div onclick="showPage('appointment')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-1 group" style="background-color: rgba(163, 177, 138, 0.4); border-color: rgba(163, 177, 138, 0.4);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#5b2a30]/10 flex justify-center items-center mb-2 md:mb-6 text-[#5b2a30] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:calendar-check-duotone"></iconify-icon>
@@ -283,7 +256,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">追蹤今日赴約名單，迅速更新結果狀態與改期，掌握每日營運節奏。</p>
         </div>
 
-        <!-- 卡片 3 (工作交接) -->
         <div onclick="showPage('handover')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-1 group" style="background-color: rgba(154, 140, 152, 0.4); border-color: rgba(154, 140, 152, 0.4);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#5b2a30]/10 flex justify-center items-center mb-2 md:mb-6 text-[#5b2a30] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:arrows-left-right-duotone"></iconify-icon>
@@ -292,7 +264,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">無縫傳遞內部資訊，確保每項任務皆被妥善處理，提供指定時間提醒與物流追蹤。</p>
         </div>
 
-        <!-- 卡片 4 (查詢關懷) -->
         <div onclick="showPage('searchPage')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-2 lg:col-span-2 group" style="background-color: rgba(74, 78, 105, 0.3); border-color: rgba(74, 78, 105, 0.3);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#5b2a30]/10 flex justify-center items-center mb-2 md:mb-6 text-[#5b2a30] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:magnifying-glass-duotone"></iconify-icon>
@@ -301,7 +272,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">全方位檢索歷史紀錄，執行深度關懷與互動，維繫長遠深刻的客戶關係。</p>
         </div>
 
-        <!-- 卡片 5 (兒控大檔) -->
         <div onclick="showPage('sectionChildrenSearch')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-2 lg:col-span-2 group" style="background-color: rgba(229, 152, 155, 0.4); border-color: rgba(229, 152, 155, 0.4);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#5b2a30]/10 flex justify-center items-center mb-2 md:mb-6 text-[#5b2a30] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:baby-duotone"></iconify-icon>
@@ -310,7 +280,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">專屬兒控配鏡資料檢索，快速掌握鏡片使用週期，守護清晰視界。</p>
         </div>
 
-        <!-- 卡片 6 (失聯關懷) -->
         <div onclick="showLostCarePage()" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-1 group border-[1.5px] hover:border-[#e76f51]/60" style="background-color: rgba(231, 111, 81, 0.25); border-color: rgba(231, 111, 81, 0.4);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#e76f51]/10 flex justify-center items-center mb-2 md:mb-6 text-[#e76f51] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:heart-break-duotone"></iconify-icon>
@@ -319,7 +288,6 @@
           <p class="hidden md:block font-serif-tc text-[#5b2a30]/70 leading-relaxed text-sm md:text-base">喚回沉睡的緣分，針對流失客群進行溫度追蹤，重新串接服務橋樑。</p>
         </div>
         
-        <!-- 🔴 新增：卡片 7 (特殊處理) -->
         <div onclick="openSpecialAuth()" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-4 md:p-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center text-center col-span-1 lg:col-span-1 group border-[1.5px] hover:border-[#d9534f]/60" style="background-color: rgba(217, 83, 79, 0.15); border-color: rgba(217, 83, 79, 0.3);">
           <div class="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-[#d9534f]/10 flex justify-center items-center mb-2 md:mb-6 text-[#d9534f] text-2xl md:text-3xl group-hover:scale-110 transition-transform duration-500">
             <iconify-icon icon="ph:siren-duotone"></iconify-icon>
@@ -330,13 +298,11 @@
 
       </div>
 
-      <!-- 分隔線與標題 -->
       <div class="my-8 md:my-10 text-center relative">
         <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-[#5b2a30]/20"></div></div>
         <span class="relative bg-[#F5F0E8] px-4 font-serif-tc text-[#5b2a30]/60 tracking-widest text-xs md:text-sm">外部系統連結</span>
       </div>
 
-      <!-- 外部連結小卡矩陣 (手機強制三排極簡化) -->
       <div class="grid grid-cols-3 gap-2 md:gap-4">
         <div onclick="window.open('https://script.google.com/macros/s/AKfycbzebcgBVBa66BXdrf9TRNlqEuO1oDua-9MO7Whq36KUw9YOMvdpssfdNOPNroFW7UAVrQ/exec', '_blank')" class="sys-card opacity-0 cursor-pointer glass-vintage-card p-3 md:p-4 rounded-xl md:rounded-2xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-3 group" style="background-color: rgba(132, 165, 157, 0.25);">
           <div class="text-[#5b2a30] text-xl md:text-2xl"><iconify-icon icon="ph:package-duotone"></iconify-icon></div>
@@ -357,9 +323,7 @@
       <p class="font-serif-tc text-[#5b2a30] text-xs md:text-sm tracking-widest">© 2026 桃園南崁管理系統. All rights reserved.</p>
     </footer>
   </div>
-  <!-- ========================================================== -->
 
-  <!-- 原有頁面 (完全保留邏輯與風格) -->
   <div id="consultation" class="page">
     <button class="btn btn-return-home mb-3 w-100 shadow-sm font-serif-tc font-bold text-[#5b2a30]" onclick="showPage('home')">🔙 返回典藏館 (選單)</button>
     <div class="card p-4">
@@ -435,7 +399,7 @@
       <div id="appDetail" style="display:none;">
         <div class="alert alert-info border-0 shadow-sm" style="background-color: rgba(132, 165, 157, 0.15); color: #3e2723;" id="appInfo"></div>
         
-        <div class="mb-3 p-3 border rounded shadow-sm bg-white bg-opacity-50">
+        <div class="mb-3 p-3 border rounded shadow-sm bg-white">
           <div class="d-flex align-items-center">
             <div class="form-check form-switch m-0 p-0">
               <input class="form-check-input m-0" type="checkbox" id="appChangeTimeSwitch" style="width: 3.5rem; height: 1.75rem; cursor: pointer;" onchange="toggleAppChangeMode(this.checked)">
@@ -459,11 +423,9 @@
         </div>
 
         <label id="appStatusLabel" class="small fw-bold text-muted">處理結果 (赴約狀態)</label>
-        <!-- 🔴 修改 1：加上 onchange 事件監聽 -->
         <select id="appStatus" class="form-select mb-3" onchange="handleAppStatusChange(this.value)"></select>
 
-        <!-- 🔴 修改 2：新增締結詳細資訊區塊 -->
-        <div id="appDealDiv" style="display:none;" class="mb-3 p-3 border rounded shadow-sm bg-white bg-opacity-50">
+        <div id="appDealDiv" style="display:none;" class="mb-3 p-3 border rounded shadow-sm bg-white">
           <label class="small text-muted mb-2 fw-bold">💰 締結詳細資訊</label>
           <div class="row g-2">
             <div class="col-6">
@@ -491,7 +453,6 @@
         <div id="appNoteArea">
           <label class="small fw-bold text-muted">備註</label>
           <div class="clear-wrapper">
-            <!-- 🔴 修改 3：改 placeholder 為 "可輸入備註" -->
             <input type="text" id="appNote" class="form-control mb-4" placeholder="可輸入備註">
             <button class="clear-btn" onclick="clearInput('appNote')">×</button>
           </div>
@@ -747,7 +708,6 @@
     </div>
   </div>
 
-  <!-- 🔴 新增：特殊處理專屬頁面 (完全獨立，不干擾其他邏輯) -->
   <div id="specialProcessPage" class="page">
     <button class="btn btn-return-home mb-3 w-100 shadow-sm font-serif-tc font-bold text-[#5b2a30]" onclick="showPage('home')">🔙 返回典藏館 (選單)</button>
     <div class="card p-4">
@@ -759,18 +719,14 @@
         <button class="btn text-white flex-grow-1 fw-bold shadow-sm" style="background-color: #d9534f;" onclick="openSpecialBatchModal()">⚡ 批量修改狀態</button>
       </div>
 
-      <!-- 列表渲染區 -->
       <div id="specialListContainer"></div>
     </div>
   </div>
 
-  <!-- Custom Scroll Track -->
   <div id="customScrollTrack">
     <div id="customScrollThumb"></div>
   </div>
 
-  <!-- 彈跳視窗們 -->
-  <!-- 🔴 新增：特殊處理-密碼驗證視窗 -->
   <div id="specialAuthModal" class="modal-overlay" style="display:none;">
     <div class="modal-body">
       <h5 class="mb-3 font-serif-tc fw-bold text-[#d9534f]">🔒 系統安全驗證</h5>
@@ -783,7 +739,6 @@
     </div>
   </div>
 
-  <!-- 🔴 新增：特殊處理-批量修改確認視窗 -->
   <div id="specialBatchModal" class="modal-overlay" style="display:none;">
     <div class="modal-body">
       <h5 class="mb-3 font-serif-tc fw-bold text-[#d9534f]">⚡ 批量操作確認</h5>
@@ -855,7 +810,6 @@
             <select id="careMin" class="form-select form-select-sm"></select>
           </div>
         </div>
-        <!-- 🔴🔴🔴 締結詳細資訊區塊 🔴🔴🔴 -->
         <div id="careDealDiv" style="display:none;" class="mt-2 pt-2 border-top border-secondary border-opacity-25">
           <label class="small text-muted mb-1 fw-bold">💰 締結詳細資訊</label>
           <div class="row g-2">
@@ -880,7 +834,6 @@
             </div>
           </div>
         </div>
-        <!-- 🔴🔴🔴 插入結束 🔴🔴🔴 -->
       </div>
 
       <textarea id="careNoteInput" class="form-control mb-3" rows="4" placeholder="請輸入關懷對話內容(其他請詳述)"></textarea>
@@ -980,36 +933,43 @@
 
   <input type="file" id="qr-input-file" accept="image/*" capture="camera" style="display:none;">
 
-  <!-- ========================================================== -->
-  <!-- ⚙️ 邏輯 -->
-  <!-- ========================================================== -->
   <script>
-    if (typeof google === 'undefined') {
+    // 🔴 雲端 API 網址 (部署後請將網址貼到引號內)
+    const API_URL = "https://script.google.com/macros/s/AKfycbxv5s8r0-HCh4Ha8aQE2N0rDzvFoCJ36o5OL4R9i-v-vkm8JSLFjWJDWczB7TDy2lzV/exec";
+
+    // 🔴 攔截器：將所有 google.script.run 自動轉成 Fetch API，完全不用改寫底下任何邏輯！
+    if (typeof google === 'undefined' || !google.script) {
       window.google = {
         script: {
           run: {
-            withSuccessHandler: function(cb) {
+            withSuccessHandler: function(onSuccess) {
               return new Proxy({}, {
                 get: function(target, backendMethod) {
                   return function(...args) {
-                    if (document.getElementById('loadingOverlay')) {
-                      document.getElementById('loadingOverlay').style.display = 'none';
-                    }
-                    setTimeout(() => {
-                      if (backendMethod === 'getAppData') cb({ appointList: [], lostAppointList: [], staff: ['模擬員工A'], doctors: ['模擬醫師A'], statuses: ['待處理', '已關懷', '結案'], tags: ['標籤A'], handoverList: [] });
-                      else if (backendMethod === 'isMaintenance') cb(false);
-                      else if (backendMethod === 'getLostCareData') cb([]);
-                      else if (backendMethod === 'searchConsultRecords') cb([]);
-                      else if (backendMethod === 'searchChildrenControl') cb([]);
-                      else if (backendMethod === 'verifySpecialAuth') cb(true); 
-                      else if (backendMethod === 'batchUpdateSpecialCare') cb('✅ 模擬批量更新成功！');
-                      else cb('模擬後端回傳成功');
-                    }, 200);
+                    fetch(API_URL, {
+                      method: "POST",
+                      headers: { "Content-Type": "text/plain;charset=utf-8" },
+                      body: JSON.stringify({ action: backendMethod, params: args })
+                    })
+                    .then(res => res.json())
+                    .then(parsed => {
+                      if (parsed.status === "success") {
+                        if (onSuccess) onSuccess(parsed.data);
+                      } else {
+                        console.error("後端錯誤:", parsed.message);
+                        alert("系統發生錯誤: " + parsed.message);
+                        if (document.getElementById('loadingOverlay')) document.getElementById('loadingOverlay').style.display = 'none';
+                      }
+                    })
+                    .catch(err => {
+                      console.error("連線錯誤:", err);
+                      alert("網路連線失敗，請檢查網路狀態或 API 網址是否正確。");
+                      if (document.getElementById('loadingOverlay')) document.getElementById('loadingOverlay').style.display = 'none';
+                    });
                   };
                 }
               });
-            },
-            withFailureHandler: function() { return this; }
+            }
           }
         }
       };
@@ -1022,7 +982,6 @@
     let currentActiveFilter = '全部';
     let cache = {}; let html5QrCode;
 
-    // 🔴 新增：特殊處理專用變數
     let specialUnreachedData = [];
 
     function initScrollAnimations() {
@@ -1570,7 +1529,7 @@
       document.getElementById('careIsAppoint').checked = false;
       document.getElementById('careIsRefuse').checked = false; 
       document.getElementById('careIsDeal').checked = false; 
-      document.getElementById('careIsSpecial').checked = false; // 🔴 新增
+      document.getElementById('careIsSpecial').checked = false; 
       document.getElementById('careTimeDiv').style.display = 'none';
       
       document.getElementById('careDealDiv').style.display = 'none';
@@ -1603,7 +1562,7 @@
       const isAppoint = document.getElementById('careIsAppoint').checked ? "是" : "否";
       const isRefuse = document.getElementById('careIsRefuse').checked; 
       const isDeal = document.getElementById('careIsDeal').checked; 
-      const isSpecial = document.getElementById('careIsSpecial').checked; // 🔴 新增
+      const isSpecial = document.getElementById('careIsSpecial').checked; 
 
       const orderNo = document.getElementById('careOrderNo').value.trim();
       const amount = document.getElementById('careAmount').value.trim();
@@ -1614,7 +1573,7 @@
         statusValue = "締結";
       } else if (isRefuse) {
         statusValue = "其他";
-      } else if (isSpecial) { // 🔴 新增
+      } else if (isSpecial) { 
         statusValue = "特殊";
       }
 
@@ -1900,7 +1859,6 @@
 
     function stopScan(readerId) {}
 
-    // 🔴 新增：監聽處理結果下拉選單
     function handleAppStatusChange(val) {
       const dealDiv = document.getElementById('appDealDiv');
       if (dealDiv) {
@@ -1914,7 +1872,6 @@
       document.getElementById('appStatusLabel').style.display = isChecked ? 'none' : 'block';
       document.getElementById('appStatus').style.display = isChecked ? 'none' : 'block';
 
-      // 🔴 修改：切換改期模式時，連動隱藏或顯示締結框
       if (isChecked) {
         if (document.getElementById('appDealDiv')) document.getElementById('appDealDiv').style.display = 'none';
       } else {
@@ -1923,7 +1880,6 @@
 
       const noteInput = document.getElementById('appNote');
       if (noteInput) {
-        // 🔴 修改：非強制輸入提示
         noteInput.placeholder = isChecked ? "改期備註 (選填)" : "可輸入備註";
       }
     }
@@ -2018,7 +1974,6 @@
       let finalStatus = document.getElementById('appStatus').value;
       const isChangeTime = document.getElementById('appChangeTimeSwitch').checked;
       
-      // 🔴 新增：抓取締結欄位變數
       let orderNo = "";
       let amount = "";
       let lutein = "";
@@ -2033,7 +1988,6 @@
           return;
         }
         
-        // 🔴 新增：如果狀態是締結，抓取值並做輕量防呆
         if (finalStatus === "締結") {
           orderNo = document.getElementById('appOrderNo') ? document.getElementById('appOrderNo').value.trim() : "";
           amount = document.getElementById('appAmount') ? document.getElementById('appAmount').value.trim() : "";
@@ -2045,7 +1999,6 @@
         }
       }
 
-      // 🔴 修改：將新變數加入 data payload (備註本身就不做強制檢查)
       const data = {
         rowIndex: it.rowIndex,
         name: it.name,
@@ -2087,7 +2040,6 @@
     }
 
     function submitHand() {
-      // 🔴 關鍵防呆：檢查是否已選擇交接人與接交人
       const fromStaff = document.getElementById('hFrom').value;
       const toStaff = document.getElementById('hTo').value;
       if (!fromStaff || !toStaff) {
@@ -2124,8 +2076,8 @@
         type: t, 
         targetDate: t.includes('指定') ? `${document.getElementById('hYear').value}/${document.getElementById('hMonth').value}/${document.getElementById('hDay').value} ${timeStr}` : '無', 
         content: finalContent, 
-        from: fromStaff, // 已經在上面抓取過，直接代入
-        to: toStaff,     // 已經在上面抓取過，直接代入
+        from: fromStaff, 
+        to: toStaff,     
         isDelay: isDelay,
         delayTime: delayTimeStr,
         isNoNotify: isNoNotify 
@@ -2419,29 +2371,28 @@
       const appoint = document.getElementById('careIsAppoint');
       const refuse = document.getElementById('careIsRefuse');
       const deal = document.getElementById('careIsDeal'); 
-      const special = document.getElementById('careIsSpecial'); // 🔴 新增
+      const special = document.getElementById('careIsSpecial'); 
       const timeDiv = document.getElementById('careTimeDiv');
       const dealDiv = document.getElementById('careDealDiv'); 
 
       if (type === 'appoint' && appoint.checked) {
         refuse.checked = false; 
         deal.checked = false; 
-        special.checked = false; // 🔴 新增
+        special.checked = false; 
         timeDiv.style.display = 'block';
         dealDiv.style.display = 'none'; 
       } else if (type === 'refuse' && refuse.checked) {
         appoint.checked = false; 
         deal.checked = false; 
-        special.checked = false; // 🔴 新增
+        special.checked = false; 
         timeDiv.style.display = 'none';
         dealDiv.style.display = 'none'; 
       } else if (type === 'deal' && deal.checked) {
         appoint.checked = false; 
         refuse.checked = false;  
-        special.checked = false; // 🔴 新增
+        special.checked = false; 
         timeDiv.style.display = 'none';
         dealDiv.style.display = 'block'; 
-      // 🔴 新增：特殊(結案) 的條件判斷
       } else if (type === 'special' && special.checked) {
         appoint.checked = false; 
         refuse.checked = false;
