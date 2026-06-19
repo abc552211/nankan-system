@@ -727,6 +727,20 @@
     <div id="customScrollThumb"></div>
   </div>
 
+  <div id="globalAuthModal" class="modal-overlay" style="display:none; z-index: 10000; background: rgba(245, 240, 232, 0.95); backdrop-filter: blur(10px);">
+    <div class="modal-body text-center" style="box-shadow: 0 20px 40px rgba(91, 42, 48, 0.15); border: 1px solid rgba(91, 42, 48, 0.2);">
+      <div class="mb-4">
+        <iconify-icon icon="ph:shield-check-duotone" style="font-size: 3rem; color: #5b2a30;"></iconify-icon>
+      </div>
+      <h4 class="mb-3 font-serif-tc fw-bold text-[#5b2a30]">系統存取驗證</h4>
+      <p class="small text-muted mb-4">請輸入您的專屬認證碼以進入系統，<br>本裝置將自動記憶您的登入狀態。</p>
+      
+      <input type="password" id="globalPinInput" class="form-control mb-4 text-center text-xl font-bold" placeholder="輸入認證碼" style="letter-spacing: 4px; padding: 15px;">
+      
+      <button class="btn w-100 text-white shadow-sm font-serif-tc text-lg tracking-widest" style="background-color: #5b2a30; padding: 12px;" onclick="savePinAndReload()">確認解鎖</button>
+    </div>
+  </div>
+
   <div id="specialAuthModal" class="modal-overlay" style="display:none;">
     <div class="modal-body">
       <h5 class="mb-3 font-serif-tc fw-bold text-[#d9534f]">🔒 系統安全驗證</h5>
@@ -937,7 +951,7 @@
     // 🔴 雲端 API 網址 (部署後請將網址貼到引號內)
     const API_URL = "https://script.google.com/macros/s/AKfycbxv5s8r0-HCh4Ha8aQE2N0rDzvFoCJ36o5OL4R9i-v-vkm8JSLFjWJDWczB7TDy2lzV/exec";
 
-    // 🔴 攔截器：將所有 google.script.run 自動轉成 Fetch API，完全不用改寫底下任何邏輯！
+    // 🔴 攔截器升級版：自動夾帶 localStorage 中的密碼
     if (typeof google === 'undefined' || !google.script) {
       window.google = {
         script: {
@@ -946,19 +960,31 @@
               return new Proxy({}, {
                 get: function(target, backendMethod) {
                   return function(...args) {
+                    
+                    // 每次請求都把手機裡存的密碼挖出來帶上去
+                    const currentPin = localStorage.getItem('nankan_pin') || "";
+
                     fetch(API_URL, {
                       method: "POST",
                       headers: { "Content-Type": "text/plain;charset=utf-8" },
-                      body: JSON.stringify({ action: backendMethod, params: args })
+                      // 🔴 這裡把 pin 傳給了後端
+                      body: JSON.stringify({ action: backendMethod, params: args, pin: currentPin })
                     })
                     .then(res => res.json())
                     .then(parsed => {
                       if (parsed.status === "success") {
                         if (onSuccess) onSuccess(parsed.data);
                       } else {
-                        console.error("後端錯誤:", parsed.message);
-                        alert("系統發生錯誤: " + parsed.message);
+                        // 隱藏載入動畫
                         if (document.getElementById('loadingOverlay')) document.getElementById('loadingOverlay').style.display = 'none';
+
+                        // 🔴 觸發門神：如果後端回傳 needLogin，代表密碼錯了或被刪了
+                        if (parsed.needLogin) {
+                          document.getElementById('globalAuthModal').style.display = 'flex';
+                        } else {
+                          console.error("後端錯誤:", parsed.message);
+                          alert("系統發生錯誤: " + parsed.message);
+                        }
                       }
                     })
                     .catch(err => {
@@ -973,6 +999,21 @@
           }
         }
       };
+    }
+
+    // 🔴 新增：儲存密碼並重新載入系統
+    function savePinAndReload() {
+      const pin = document.getElementById('globalPinInput').value.trim();
+      if (!pin) { 
+        alert("請輸入認證碼！"); 
+        return; 
+      }
+      
+      // 將密碼存入瀏覽器的 LocalStorage 永久記憶
+      localStorage.setItem('nankan_pin', pin);
+      
+      // 重新整理頁面，系統載入時會自動發送 API，這時候就會帶上新密碼了
+      location.reload(); 
     }
 
     let allSearchData = []; 
