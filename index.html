@@ -194,6 +194,25 @@
       backdrop-filter: blur(5px);
       border: 1px solid rgba(91, 42, 48, 0.2) !important;
     }
+
+    /* 🔴 新增：相機即時掃描的雷射紅線特效 */
+    .scanner-container { position: relative; width: 100%; }
+    .scanner-laser {
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      background: red;
+      box-shadow: 0 0 10px red;
+      top: 50%;
+      left: 0;
+      z-index: 10;
+      animation: laserScan 2s infinite ease-in-out;
+      display: none; /* 預設隱藏，啟動時顯示 */
+    }
+    @keyframes laserScan {
+      0%, 100% { transform: translateY(-40px); }
+      50% { transform: translateY(40px); }
+    }
   </style>
 </head>
 
@@ -333,10 +352,18 @@
         <div class="clear-wrapper">
           <input type="text" id="cBarcode" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cBarcode')">×</button>
         </div>
-        <button class="btn btn-warning" onclick="startScan('cBarcode','reader')">📷</button>
+        <div class="input-group mb-3">
+        <div class="clear-wrapper">
+          <input type="text" id="cBarcode" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cBarcode')">×</button>
+        </div>
+        <button class="btn btn-warning" onclick="startLiveScan('cBarcode','reader','stop-reader')">📷</button>
       </div>
-      <div id="reader"></div>
-      <button id="stop-reader" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopScan('reader')">❌ 關閉相機</button>
+      <div class="scanner-container">
+        <div id="reader" style="display:none; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 2px solid #4a90e2;"></div>
+        <div id="reader-laser" class="scanner-laser"></div>
+      </div>
+      <button id="stop-reader" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('reader','stop-reader')">❌ 關閉相機</button>
+      
       <div class="row">
         <div class="col-6"><label class="fw-bold small text-muted">客戶姓名</label>
           <div class="clear-wrapper">
