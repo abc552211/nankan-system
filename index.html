@@ -195,23 +195,24 @@
       border: 1px solid rgba(91, 42, 48, 0.2) !important;
     }
 
-    /* 🔴 新增：相機即時掃描的雷射紅線特效 */
+    /* 🔴 修改：相機即時掃描的雷射紅線 (固定中間閃爍) */
     .scanner-container { position: relative; width: 100%; }
     .scanner-laser {
       position: absolute;
       width: 100%;
       height: 2px;
-      background: red;
-      box-shadow: 0 0 10px red;
+      background: rgba(255, 0, 0, 0.8);
+      box-shadow: 0 0 10px rgba(255, 0, 0, 1), 0 0 20px rgba(255, 0, 0, 0.5);
       top: 50%;
       left: 0;
       z-index: 10;
-      animation: laserScan 2s infinite ease-in-out;
-      display: none; /* 預設隱藏，啟動時顯示 */
+      transform: translateY(-50%); /* 確保絕對垂直置中 */
+      animation: laserBlink 0.6s infinite alternate ease-in-out; /* 閃爍動畫 */
+      display: none; 
     }
-    @keyframes laserScan {
-      0%, 100% { transform: translateY(-40px); }
-      50% { transform: translateY(40px); }
+    @keyframes laserBlink {
+      from { opacity: 0.1; }
+      to { opacity: 1; }
     }
   </style>
 </head>
@@ -1772,7 +1773,6 @@
       const laserDiv = document.getElementById(readerId + '-laser');
       const stopBtn = stopBtnId ? document.getElementById(stopBtnId) : null;
       
-      // 如果已經有掃描器在跑，先強制關閉
       if (liveScanner) stopLiveScan(readerId, stopBtnId);
 
       readerDiv.style.display = 'block';
@@ -1781,7 +1781,6 @@
 
       liveScanner = new Html5Qrcode(readerId);
 
-      // 設定掃描框參數 (qrbox 負責畫出橫向長方框)
       const config = { 
         fps: 10, 
         qrbox: { width: 250, height: 100 }, 
@@ -1789,23 +1788,29 @@
       };
 
       liveScanner.start(
-        { facingMode: "environment" }, // 強制使用後置鏡頭
+        { facingMode: "environment" },
         config,
         (decodedText, decodedResult) => {
-          // === 這裡負責處理「掃到條碼」的瞬間 ===
-          let finalBarcode = decodedText;
+          // 🔴 修改：清除前後可能的隱藏空白或換行符號
+          let finalBarcode = decodedText.trim(); 
           const isChildrenPage = (inputId === 'cControlID');
           
           try {
             if (isChildrenPage) {
               const childMatch = finalBarcode.match(/[A-Za-z]\d{5}/);
-              if (!childMatch) throw new Error("Not a child ID");
+              if (!childMatch) throw new Error("這不是兒控條碼格式: " + finalBarcode);
               finalBarcode = childMatch[0].toUpperCase();
             } else {
-              // 防呆檢查：避開身分證、檢查格式
-              if (/^[A-Za-z][1,2]\d{8}$/.test(finalBarcode)) throw new Error("Scanned Taiwan ID");
-              if (!/^\d{7}-?\d{1}$/.test(finalBarcode)) throw new Error("Not target format");
+              // 避開身分證格式
+              if (/^[A-Za-z][1,2]\d{8}$/.test(finalBarcode)) throw new Error("掃到身分證了");
               
+              // 🔴 關鍵修改：放寬正則表達式，不要把開頭(^)和結尾($)綁死。
+              // 只要掃出來的字串裡面「包含」連續的 7 或 8 個數字，就直接把它抽出來用！
+              const numMatch = finalBarcode.match(/\d{7}-?\d{1}/);
+              if (!numMatch) throw new Error("找不到目標數字格式: " + finalBarcode);
+              
+              finalBarcode = numMatch[0];
+              // 自動補上減號
               if (finalBarcode.length === 8 && !finalBarcode.includes('-')) {
                 finalBarcode = finalBarcode.substring(0, 7) + "-" + finalBarcode.substring(7, 8);
               }
@@ -1819,12 +1824,12 @@
             stopLiveScan(readerId, stopBtnId);
             
           } catch(e) {
-            // 格式不對就當作沒掃到，讓相機繼續掃，使用者完全無感
-            console.log("忽略錯誤條碼: " + finalBarcode);
+            // 格式不對就默默忽略，讓相機繼續掃描下一幀
+            console.log("忽略條碼:", e.message);
           }
         },
         (errorMessage) => {
-          // 即時掃描過程中，沒掃到東西會一直報錯，這是正常的，忽略即可
+          // 掃描過程中的背景雜訊報錯，正常忽略
         }
       ).catch((err) => {
         alert("無法啟動相機，請確認已給予瀏覽器相機權限！");
