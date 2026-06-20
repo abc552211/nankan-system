@@ -348,10 +348,7 @@
     <div class="card p-4">
       <h4 class="mb-4">🆕新增諮詢/預約紀錄</h4>
       <label class="fw-bold small text-muted">客戶病歷序號</label>
-      <div class="input-group mb-3">
-        <div class="clear-wrapper">
-          <input type="text" id="cBarcode" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cBarcode')">×</button>
-        </div>
+      
         <div class="input-group mb-3">
         <div class="clear-wrapper">
           <input type="text" id="cBarcode" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cBarcode')">×</button>
@@ -577,14 +574,19 @@
       <h4 class="mb-4">🔍諮詢預約查詢與關懷</h4>
 
       <label class="small fw-bold text-muted">依病歷序號</label>
-      <div class="input-group mb-3">
+      
+        <div class="input-group mb-3">
         <div class="clear-wrapper">
           <input type="text" id="sBarcode" class="form-control" placeholder="輸入或掃碼">
           <button class="clear-btn" onclick="clearInput('sBarcode')">×</button>
         </div>
-        <button class="btn btn-warning" onclick="startScan('sBarcode','readerSearch')">📷</button>
+        <button class="btn btn-warning" onclick="startLiveScan('sBarcode','readerSearch','stop-readerSearch')">📷</button>
       </div>
-      <div id="readerSearch"></div>
+      <div class="scanner-container">
+        <div id="readerSearch" style="display:none; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 2px solid #4a90e2;"></div>
+        <div id="readerSearch-laser" class="scanner-laser"></div>
+      </div>
+      <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('readerSearch','stop-readerSearch')">❌ 關閉相機</button>
       <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopScan('readerSearch')">❌ 關閉相機</button>
 
       <div class="row g-2">
@@ -629,11 +631,16 @@
       <label class="small fw-bold text-muted">依編號(條碼A00000)</label>
       <div class="input-group mb-3">
         <div class="clear-wrapper">
-          <input type="text" id="cControlID" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cControlID')">×</button>
+          <input type="text" id="sBarcode" class="form-control" placeholder="輸入或掃碼">
+          <button class="clear-btn" onclick="clearInput('sBarcode')">×</button>
         </div>
-        <button class="btn btn-warning" onclick="startScan('cControlID','readerChildren')">📷</button>
+        <button class="btn btn-warning" onclick="startLiveScan('sBarcode','readerSearch','stop-readerSearch')">📷</button>
       </div>
-      <div id="readerChildren"></div>
+      <div class="scanner-container">
+        <div id="readerSearch" style="display:none; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 2px solid #4a90e2;"></div>
+        <div id="readerSearch-laser" class="scanner-laser"></div>
+      </div>
+      <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('readerSearch','stop-readerSearch')">❌ 關閉相機</button>
       <button id="stop-readerChildren" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopScan('readerChildren')">❌ 關閉相機</button>
       <div class="row g-2">
         <div class="col-6"><label class="small fw-bold text-muted">依姓名</label>
@@ -802,9 +809,12 @@
       <input type="hidden" id="modalRowIndex">
       <div class="input-group mb-3 d-flex align-items-center">
         <input type="text" id="modalNewBarcode" class="form-control" placeholder="手輸或掃碼">
-        <button class="btn btn-primary btn-circle ms-2" onclick="startModalScan()">📷</button>
+        <button class="btn btn-primary btn-circle ms-2" onclick="startLiveScan('modalNewBarcode','modalReader', null)">📷</button>
       </div>
-      <div id="modalReader" style="display:none; width:100%; margin-bottom:15px; border: 1px solid #ccc;"></div>
+      <div class="scanner-container">
+        <div id="modalReader" style="display:none; width:100%; margin-bottom:15px; border: 1px solid #ccc;"></div>
+        <div id="modalReader-laser" class="scanner-laser"></div>
+      </div>
       <div class="d-grid gap-2">
         <button class="btn btn-success" onclick="submitNewBarcode()">確認更新</button>
         <button class="btn btn-light" onclick="closeUpdateModal()">取消關閉</button>
@@ -1753,179 +1763,103 @@
       }).searchChildrenControl(q); 
     }
 
-    async function startScan(inputId, readerId) {
-      const fileInput = document.getElementById('qr-input-file');
-      fileInput.onchange = async (e) => {
-        if (e.target.files.length === 0) return;
-        const overlay = document.getElementById('loadingOverlay');
-        const loadingTxt = document.getElementById('loadingText');
-        overlay.style.display = 'flex';
-        loadingTxt.innerText = "🔍 強化辨識中...";
+    // 🔴 宣告全域的掃描器實例
+    let liveScanner = null;
 
-        const image = await createImageBitmap(e.target.files[0]);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        const size = Math.min(image.width, image.height) * 0.8;
-        canvas.width = 1200;
-        canvas.height = 1200;
-        
-        ctx.filter = 'contrast(300%) grayscale(1) brightness(90%)';
-        ctx.drawImage(image, (image.width-size)/2, (image.height-size)/2, size, size, 0, 0, 1200, 1200);
-
-        const html5QrCode = new Html5Qrcode(readerId);
-        const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
-
-        try {
-          let barcodeResult = await html5QrCode.scanFile(dataUrl, false);
-          const isChildrenPage = (inputId === 'cControlID');
-
-          if (isChildrenPage) {
-            const childMatch = barcodeResult.match(/[A-Za-z]\d{5}/);
-            if (!childMatch) throw new Error("Not a child ID");
-            barcodeResult = childMatch[0].toUpperCase();
-          } else {
-            if (/^[A-Za-z][1,2]\d{8}$/.test(barcodeResult)) throw new Error("Scanned Taiwan ID");
-            if (!/^\d{7}-?\d{1}$/.test(barcodeResult)) throw new Error("Not target format");
-            
-            if (barcodeResult.length === 8 && !barcodeResult.includes('-')) {
-              barcodeResult = barcodeResult.substring(0, 7) + "-" + barcodeResult.substring(7, 8);
-            }
-          }
-
-          document.getElementById(inputId).value = barcodeResult;
-          if (navigator.vibrate) navigator.vibrate(50);
-          
-          overlay.style.display = 'none';
-          html5QrCode.clear();
-          fileInput.value = ""; 
-          return;
-        } catch (barcodeErr) {
-          const isChildrenPage = (inputId === 'cControlID');
-          
-          if (isChildrenPage) {
-            alert("❌ 辨識失敗：未找到 A+5碼數字 格式，請確保條碼清晰無反光。");
-            overlay.style.display = 'none';
-            html5QrCode.clear();
-            fileInput.value = ""; 
-            return;
-          }
-
-          loadingTxt.innerText = "📝 處理中...";
-          try {
-            const { data: { text } } = await Tesseract.recognize(dataUrl, 'eng', {
-              tessedit_char_whitelist: '0123456789-' 
-            });
-
-            const pattern = /\d{7}-\d{1}/;
-            const match = text.match(pattern);
-
-            if (match) {
-              document.getElementById(inputId).value = match[0];
-              if (navigator.vibrate) navigator.vibrate([50, 50]);
-            } else {
-              const eightDigitMatch = text.match(/(?:^|[^\d])(\d{8})(?:[^\d]|$)/);
-              if (eightDigitMatch) {
-                const rawNums = eightDigitMatch[1];
-                document.getElementById(inputId).value = rawNums.substring(0, 7) + "-" + rawNums.substring(7, 8);
-                if (navigator.vibrate) navigator.vibrate([50, 50]);
-              } else {
-                alert("❌ 辨識失敗：畫面中未找到 1234567-8 格式，請確保底端條碼入鏡且無反光。");
-              }
-            }
-          } catch (ocrErr) {
-            alert("OCR 引擎初始化失敗，請重新拍照。");
-          } finally {
-            overlay.style.display = 'none';
-            html5QrCode.clear();
-            fileInput.value = ""; 
-          }
-        }
-      };
-      fileInput.click();
-    }
-
-    async function startModalScan() {
-      const fileInput = document.getElementById('qr-input-file');
+    // 🔴 啟動即時相機掃描
+    function startLiveScan(inputId, readerId, stopBtnId) {
+      const readerDiv = document.getElementById(readerId);
+      const laserDiv = document.getElementById(readerId + '-laser');
+      const stopBtn = stopBtnId ? document.getElementById(stopBtnId) : null;
       
-      fileInput.onchange = async (e) => {
-        if (e.target.files.length === 0) return;
-        const overlay = document.getElementById('loadingOverlay');
-        const loadingTxt = document.getElementById('loadingText');
-        overlay.style.display = 'flex';
-        loadingTxt.innerText = "🔍 補登辨識中...";
+      // 如果已經有掃描器在跑，先強制關閉
+      if (liveScanner) stopLiveScan(readerId, stopBtnId);
 
-        const image = await createImageBitmap(e.target.files[0]);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+      readerDiv.style.display = 'block';
+      if (laserDiv) laserDiv.style.display = 'block';
+      if (stopBtn) stopBtn.style.display = 'block';
 
-        const size = Math.min(image.width, image.height) * 0.8;
-        canvas.width = 1200;
-        canvas.height = 1200;
-        
-        ctx.filter = 'contrast(300%) grayscale(1) brightness(90%)';
-        ctx.drawImage(image, (image.width-size)/2, (image.height-size)/2, size, size, 0, 0, 1200, 1200);
+      liveScanner = new Html5Qrcode(readerId);
 
-        const html5QrCode = new Html5Qrcode("modalReader"); 
-        const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+      // 設定掃描框參數 (qrbox 負責畫出橫向長方框)
+      const config = { 
+        fps: 10, 
+        qrbox: { width: 250, height: 100 }, 
+        aspectRatio: 1.0 
+      };
 
-        try {
-          let barcodeResult = await html5QrCode.scanFile(dataUrl, false);
+      liveScanner.start(
+        { facingMode: "environment" }, // 強制使用後置鏡頭
+        config,
+        (decodedText, decodedResult) => {
+          // === 這裡負責處理「掃到條碼」的瞬間 ===
+          let finalBarcode = decodedText;
+          const isChildrenPage = (inputId === 'cControlID');
           
-          if (/^[A-Za-z][1,2]\d{8}$/.test(barcodeResult)) throw new Error("Scanned Taiwan ID");
-          if (!/^\d{7}-?\d{1}$/.test(barcodeResult)) throw new Error("Not target format");
-          
-          if (barcodeResult.length === 8 && !barcodeResult.includes('-')) {
-            barcodeResult = barcodeResult.substring(0, 7) + "-" + barcodeResult.substring(7, 8);
-          }
-
-          document.getElementById('modalNewBarcode').value = barcodeResult;
-          if (navigator.vibrate) navigator.vibrate(50);
-          
-          overlay.style.display = 'none';
-          html5QrCode.clear();
-          fileInput.value = ""; 
-          return;
-        } catch (barcodeErr) {
-          loadingTxt.innerText = "📝 處理中...";
           try {
-            const { data: { text } } = await Tesseract.recognize(dataUrl, 'eng', {
-              tessedit_char_whitelist: '0123456789-' 
-            });
-
-            const pattern = /\d{7}-\d{1}/;
-            const match = text.match(pattern);
-
-            if (match) {
-              document.getElementById('modalNewBarcode').value = match[0];
-              if (navigator.vibrate) navigator.vibrate([50, 50]);
+            if (isChildrenPage) {
+              const childMatch = finalBarcode.match(/[A-Za-z]\d{5}/);
+              if (!childMatch) throw new Error("Not a child ID");
+              finalBarcode = childMatch[0].toUpperCase();
             } else {
-              const eightDigitMatch = text.match(/(?:^|[^\d])(\d{8})(?:[^\d]|$)/);
-              if (eightDigitMatch) {
-                const rawNums = eightDigitMatch[1];
-                document.getElementById('modalNewBarcode').value = rawNums.substring(0, 7) + "-" + rawNums.substring(7, 8);
-                if (navigator.vibrate) navigator.vibrate([50, 50]);
-              } else {
-                alert("❌ 辨識失敗：畫面中未找到 1234567-8 格式，請確保底端條碼入鏡且無反光。");
+              // 防呆檢查：避開身分證、檢查格式
+              if (/^[A-Za-z][1,2]\d{8}$/.test(finalBarcode)) throw new Error("Scanned Taiwan ID");
+              if (!/^\d{7}-?\d{1}$/.test(finalBarcode)) throw new Error("Not target format");
+              
+              if (finalBarcode.length === 8 && !finalBarcode.includes('-')) {
+                finalBarcode = finalBarcode.substring(0, 7) + "-" + finalBarcode.substring(7, 8);
               }
             }
-          } catch (ocrErr) {
-            alert("OCR 引擎初始化失敗，請重新拍照。");
-          } finally {
-            overlay.style.display = 'none';
-            html5QrCode.clear();
-            fileInput.value = ""; 
+            
+            // 驗證成功！填入欄位並震動
+            document.getElementById(inputId).value = finalBarcode;
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+            
+            // 自動關閉相機
+            stopLiveScan(readerId, stopBtnId);
+            
+          } catch(e) {
+            // 格式不對就當作沒掃到，讓相機繼續掃，使用者完全無感
+            console.log("忽略錯誤條碼: " + finalBarcode);
           }
+        },
+        (errorMessage) => {
+          // 即時掃描過程中，沒掃到東西會一直報錯，這是正常的，忽略即可
         }
-      };
-      fileInput.click();
+      ).catch((err) => {
+        alert("無法啟動相機，請確認已給予瀏覽器相機權限！");
+        readerDiv.style.display = 'none';
+        if (laserDiv) laserDiv.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'none';
+      });
     }
+
+    // 🔴 停止相機掃描
+    function stopLiveScan(readerId, stopBtnId) {
+      if (liveScanner) {
+        liveScanner.stop().then(() => {
+          liveScanner.clear();
+          liveScanner = null;
+          
+          // 隱藏畫面元素
+          document.getElementById(readerId).style.display = 'none';
+          const laserDiv = document.getElementById(readerId + '-laser');
+          if (laserDiv) laserDiv.style.display = 'none';
+          if (stopBtnId) document.getElementById(stopBtnId).style.display = 'none';
+          
+        }).catch(err => console.log("關閉相機發生錯誤", err));
+      }
+    }
+
+    
 
     function closeUpdateModal() {
       document.getElementById('updateIdModal').style.display = 'none';
+      // 如果關閉視窗時相機還開著，強制關掉它
+      stopLiveScan('modalReader', null); 
     }
 
-    function stopScan(readerId) {}
+    
 
     function handleAppStatusChange(val) {
       const dealDiv = document.getElementById('appDealDiv');
