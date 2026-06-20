@@ -349,8 +349,7 @@
     <div class="card p-4">
       <h4 class="mb-4">🆕新增諮詢/預約紀錄</h4>
       <label class="fw-bold small text-muted">客戶病歷序號</label>
-      
-        <div class="input-group mb-3">
+      <div class="input-group mb-3">
         <div class="clear-wrapper">
           <input type="text" id="cBarcode" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cBarcode')">×</button>
         </div>
@@ -575,8 +574,7 @@
       <h4 class="mb-4">🔍諮詢預約查詢與關懷</h4>
 
       <label class="small fw-bold text-muted">依病歷序號</label>
-      
-        <div class="input-group mb-3">
+      <div class="input-group mb-3">
         <div class="clear-wrapper">
           <input type="text" id="sBarcode" class="form-control" placeholder="輸入或掃碼">
           <button class="clear-btn" onclick="clearInput('sBarcode')">×</button>
@@ -588,7 +586,6 @@
         <div id="readerSearch-laser" class="scanner-laser"></div>
       </div>
       <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('readerSearch','stop-readerSearch')">❌ 關閉相機</button>
-      <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopScan('readerSearch')">❌ 關閉相機</button>
 
       <div class="row g-2">
         <div class="col-6">
@@ -632,17 +629,15 @@
       <label class="small fw-bold text-muted">依編號(條碼A00000)</label>
       <div class="input-group mb-3">
         <div class="clear-wrapper">
-          <input type="text" id="sBarcode" class="form-control" placeholder="輸入或掃碼">
-          <button class="clear-btn" onclick="clearInput('sBarcode')">×</button>
+          <input type="text" id="cControlID" class="form-control" placeholder="輸入或掃碼"><button class="clear-btn" onclick="clearInput('cControlID')">×</button>
         </div>
-        <button class="btn btn-warning" onclick="startLiveScan('sBarcode','readerSearch','stop-readerSearch')">📷</button>
+        <button class="btn btn-warning" onclick="startLiveScan('cControlID','readerChildren','stop-readerChildren')">📷</button>
       </div>
       <div class="scanner-container">
-        <div id="readerSearch" style="display:none; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 2px solid #4a90e2;"></div>
-        <div id="readerSearch-laser" class="scanner-laser"></div>
+        <div id="readerChildren" style="display:none; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 2px solid #4a90e2;"></div>
+        <div id="readerChildren-laser" class="scanner-laser"></div>
       </div>
-      <button id="stop-readerSearch" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('readerSearch','stop-readerSearch')">❌ 關閉相機</button>
-      <button id="stop-readerChildren" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopScan('readerChildren')">❌ 關閉相機</button>
+      <button id="stop-readerChildren" class="btn btn-danger w-100 mb-3" style="display:none;" onclick="stopLiveScan('readerChildren','stop-readerChildren')">❌ 關閉相機</button>
       <div class="row g-2">
         <div class="col-6"><label class="small fw-bold text-muted">依姓名</label>
           <div class="clear-wrapper">
@@ -1201,15 +1196,15 @@
           if(el) el.innerHTML = "";
         });
 
-        // 🔴 確保切換頁面時，強制呼叫新的斷電函式，徹底釋放相機硬體
+        // 🔴 確保切換頁面時，強制呼叫斷電函式，徹底釋放 iPhone 相機硬體
         if (typeof stopLiveScan === 'function') {
-          stopLiveScan('reader', 'stop-reader');
-          stopLiveScan('readerSearch', 'stop-readerSearch');
-          stopLiveScan('readerChildren', 'stop-readerChildren');
-          stopLiveScan('modalReader', null);
+          stopLiveScan(null, null); 
         }
-        document.querySelectorAll('[id^="reader"]').forEach(r => r.style.display = 'none');
+        // 強制隱藏所有相機相關的 UI 元素
+        document.querySelectorAll('div[id^="reader"]').forEach(r => r.style.display = 'none');
         document.querySelectorAll('.scanner-laser').forEach(l => l.style.display = 'none');
+        document.querySelectorAll('button[id^="stop-reader"]').forEach(b => b.style.display = 'none');
+        if (document.getElementById('modalReader')) document.getElementById('modalReader').style.display = 'none';
 
         if(document.getElementById('searchLostAge')) {
           document.getElementById('searchLostAge').value = 100;
@@ -1771,9 +1766,9 @@
     let liveScanner = null;
     let isCameraStarting = false;
 
-    // 🔴 啟動即時相機掃描 (加入 async/await 等待硬體)
+    // 🔴 啟動即時相機掃描
     async function startLiveScan(inputId, readerId, stopBtnId) {
-      if (isCameraStarting) return; // 防止使用者狂按，鎖死啟動過程
+      if (isCameraStarting) return; // 防止使用者狂按按鈕，鎖死啟動過程
       isCameraStarting = true;
 
       const readerDiv = document.getElementById(readerId);
@@ -1782,7 +1777,7 @@
       
       // 如果背景還有相機在跑，嚴格等待它完全斷電釋放後才繼續
       if (liveScanner) {
-        await stopLiveScan(null, null, true); 
+        await stopLiveScan(null, null); 
       }
 
       readerDiv.style.display = 'block';
@@ -1823,7 +1818,7 @@
               document.getElementById(inputId).value = finalBarcode;
               if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
               
-              // 成功後呼叫斷電
+              // 成功後自動斷電
               stopLiveScan(readerId, stopBtnId);
               
             } catch(e) {
@@ -1838,35 +1833,32 @@
         if (laserDiv) laserDiv.style.display = 'none';
         if (stopBtn) stopBtn.style.display = 'none';
       } finally {
-        isCameraStarting = false; // 解除鎖定
+        isCameraStarting = false; // 解除啟動鎖定
       }
     }
 
-    // 🔴 停止相機掃描 (改為 async 確保徹底斷電)
-    async function stopLiveScan(readerId, stopBtnId, keepInstance = false) {
+    // 🔴 停止相機掃描 (強力斷電機制)
+    async function stopLiveScan(readerId, stopBtnId) {
       if (liveScanner) {
         try {
-          // Html5Qrcode 的狀態為 2 代表正在掃描中，必須呼叫 stop()
-          if (liveScanner.getState() === 2) {
-            await liveScanner.stop();
-          }
-          liveScanner.clear();
+          // 直接呼叫 stop 強制停止鏡頭硬體
+          await liveScanner.stop();
         } catch (err) {
           console.log("關閉相機發生錯誤", err);
-        } finally {
-          liveScanner = null;
         }
+        try {
+          liveScanner.clear(); // 清除畫布避免殘影
+        } catch(e){}
+        liveScanner = null;
       }
       
-      // 隱藏目前指定的畫面元素
-      if (!keepInstance) {
-        if (readerId) document.getElementById(readerId).style.display = 'none';
-        if (readerId) {
-          const laserDiv = document.getElementById(readerId + '-laser');
-          if (laserDiv) laserDiv.style.display = 'none';
-        }
-        if (stopBtnId) document.getElementById(stopBtnId).style.display = 'none';
+      // 隱藏目前指定的畫面 UI 元素
+      if (readerId) document.getElementById(readerId).style.display = 'none';
+      if (readerId) {
+        const laserDiv = document.getElementById(readerId + '-laser');
+        if (laserDiv) laserDiv.style.display = 'none';
       }
+      if (stopBtnId) document.getElementById(stopBtnId).style.display = 'none';
     }
 
     // 🔴 確保關閉補登視窗時，一併關閉相機
