@@ -1201,12 +1201,15 @@
           if(el) el.innerHTML = "";
         });
 
-        if (html5QrCode) { try { html5QrCode.stop(); } catch(e){} } 
-        if (typeof mScanner !== 'undefined' && mScanner) {
-          try { mScanner.stop(); mScanner.clear(); } catch(e){}
-          mScanner = null;
+        // 🔴 確保切換頁面時，強制呼叫新的斷電函式，徹底釋放相機硬體
+        if (typeof stopLiveScan === 'function') {
+          stopLiveScan('reader', 'stop-reader');
+          stopLiveScan('readerSearch', 'stop-readerSearch');
+          stopLiveScan('readerChildren', 'stop-readerChildren');
+          stopLiveScan('modalReader', null);
         }
         document.querySelectorAll('[id^="reader"]').forEach(r => r.style.display = 'none');
+        document.querySelectorAll('.scanner-laser').forEach(l => l.style.display = 'none');
 
         if(document.getElementById('searchLostAge')) {
           document.getElementById('searchLostAge').value = 100;
@@ -1764,16 +1767,23 @@
       }).searchChildrenControl(q); 
     }
 
-    // 🔴 宣告全域的掃描器實例
+   // 🔴 宣告全域的掃描器實例與狀態鎖
     let liveScanner = null;
+    let isCameraStarting = false;
 
-    // 🔴 啟動即時相機掃描
-    function startLiveScan(inputId, readerId, stopBtnId) {
+    // 🔴 啟動即時相機掃描 (加入 async/await 等待硬體)
+    async function startLiveScan(inputId, readerId, stopBtnId) {
+      if (isCameraStarting) return; // 防止使用者狂按，鎖死啟動過程
+      isCameraStarting = true;
+
       const readerDiv = document.getElementById(readerId);
       const laserDiv = document.getElementById(readerId + '-laser');
       const stopBtn = stopBtnId ? document.getElementById(stopBtnId) : null;
       
-      if (liveScanner) stopLiveScan(readerId, stopBtnId);
+      // 如果背景還有相機在跑，嚴格等待它完全斷電釋放後才繼續
+      if (liveScanner) {
+        await stopLiveScan(null, null, true); 
+      }
 
       readerDiv.style.display = 'block';
       if (laserDiv) laserDiv.style.display = 'block';
@@ -1787,80 +1797,81 @@
         aspectRatio: 1.0 
       };
 
-      liveScanner.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText, decodedResult) => {
-          // 🔴 修改：清除前後可能的隱藏空白或換行符號
-          let finalBarcode = decodedText.trim(); 
-          const isChildrenPage = (inputId === 'cControlID');
-          
-          try {
-            if (isChildrenPage) {
-              const childMatch = finalBarcode.match(/[A-Za-z]\d{5}/);
-              if (!childMatch) throw new Error("這不是兒控條碼格式: " + finalBarcode);
-              finalBarcode = childMatch[0].toUpperCase();
-            } else {
-              // 避開身分證格式
-              if (/^[A-Za-z][1,2]\d{8}$/.test(finalBarcode)) throw new Error("掃到身分證了");
-              
-              // 🔴 關鍵修改：放寬正則表達式，不要把開頭(^)和結尾($)綁死。
-              // 只要掃出來的字串裡面「包含」連續的 7 或 8 個數字，就直接把它抽出來用！
-              const numMatch = finalBarcode.match(/\d{7}-?\d{1}/);
-              if (!numMatch) throw new Error("找不到目標數字格式: " + finalBarcode);
-              
-              finalBarcode = numMatch[0];
-              // 自動補上減號
-              if (finalBarcode.length === 8 && !finalBarcode.includes('-')) {
-                finalBarcode = finalBarcode.substring(0, 7) + "-" + finalBarcode.substring(7, 8);
+      try {
+        await liveScanner.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText, decodedResult) => {
+            let finalBarcode = decodedText.trim(); 
+            const isChildrenPage = (inputId === 'cControlID');
+            
+            try {
+              if (isChildrenPage) {
+                const childMatch = finalBarcode.match(/[A-Za-z]\d{5}/);
+                if (!childMatch) throw new Error("這不是兒控條碼格式");
+                finalBarcode = childMatch[0].toUpperCase();
+              } else {
+                if (/^[A-Za-z][1,2]\d{8}$/.test(finalBarcode)) throw new Error("掃到身分證了");
+                const numMatch = finalBarcode.match(/\d{7}-?\d{1}/);
+                if (!numMatch) throw new Error("找不到目標數字格式");
+                finalBarcode = numMatch[0];
+                if (finalBarcode.length === 8 && !finalBarcode.includes('-')) {
+                  finalBarcode = finalBarcode.substring(0, 7) + "-" + finalBarcode.substring(7, 8);
+                }
               }
+              
+              document.getElementById(inputId).value = finalBarcode;
+              if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+              
+              // 成功後呼叫斷電
+              stopLiveScan(readerId, stopBtnId);
+              
+            } catch(e) {
+              // 格式不合，讓相機繼續掃
             }
-            
-            // 驗證成功！填入欄位並震動
-            document.getElementById(inputId).value = finalBarcode;
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
-            
-            // 自動關閉相機
-            stopLiveScan(readerId, stopBtnId);
-            
-          } catch(e) {
-            // 格式不對就默默忽略，讓相機繼續掃描下一幀
-            console.log("忽略條碼:", e.message);
-          }
-        },
-        (errorMessage) => {
-          // 掃描過程中的背景雜訊報錯，正常忽略
-        }
-      ).catch((err) => {
-        alert("無法啟動相機，請確認已給予瀏覽器相機權限！");
+          },
+          (errorMessage) => {}
+        );
+      } catch (err) {
+        alert("無法啟動相機，請確認已給予瀏覽器相機權限，或重新整理網頁！");
         readerDiv.style.display = 'none';
         if (laserDiv) laserDiv.style.display = 'none';
         if (stopBtn) stopBtn.style.display = 'none';
-      });
-    }
-
-    // 🔴 停止相機掃描
-    function stopLiveScan(readerId, stopBtnId) {
-      if (liveScanner) {
-        liveScanner.stop().then(() => {
-          liveScanner.clear();
-          liveScanner = null;
-          
-          // 隱藏畫面元素
-          document.getElementById(readerId).style.display = 'none';
-          const laserDiv = document.getElementById(readerId + '-laser');
-          if (laserDiv) laserDiv.style.display = 'none';
-          if (stopBtnId) document.getElementById(stopBtnId).style.display = 'none';
-          
-        }).catch(err => console.log("關閉相機發生錯誤", err));
+      } finally {
+        isCameraStarting = false; // 解除鎖定
       }
     }
 
-    
+    // 🔴 停止相機掃描 (改為 async 確保徹底斷電)
+    async function stopLiveScan(readerId, stopBtnId, keepInstance = false) {
+      if (liveScanner) {
+        try {
+          // Html5Qrcode 的狀態為 2 代表正在掃描中，必須呼叫 stop()
+          if (liveScanner.getState() === 2) {
+            await liveScanner.stop();
+          }
+          liveScanner.clear();
+        } catch (err) {
+          console.log("關閉相機發生錯誤", err);
+        } finally {
+          liveScanner = null;
+        }
+      }
+      
+      // 隱藏目前指定的畫面元素
+      if (!keepInstance) {
+        if (readerId) document.getElementById(readerId).style.display = 'none';
+        if (readerId) {
+          const laserDiv = document.getElementById(readerId + '-laser');
+          if (laserDiv) laserDiv.style.display = 'none';
+        }
+        if (stopBtnId) document.getElementById(stopBtnId).style.display = 'none';
+      }
+    }
 
+    // 🔴 確保關閉補登視窗時，一併關閉相機
     function closeUpdateModal() {
       document.getElementById('updateIdModal').style.display = 'none';
-      // 如果關閉視窗時相機還開著，強制關掉它
       stopLiveScan('modalReader', null); 
     }
 
