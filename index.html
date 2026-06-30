@@ -1200,22 +1200,32 @@ const { data: appData } = await _supabase.from('consultations')
   activeReaderId = readerId;
   activeScanner = new Html5Qrcode(readerId);
 
-  // 掃描器參數設定
+  // 🚀 核心速度優化設定
   const config = { 
-    fps: 10, // 降低幀率，讓手機相機有足夠時間「自動對焦」
+    fps: 20,             // 1. 提高偵率（原為10），加速連續影格的捕捉辨識
+    rememberLastCameraUsed: true,
     qrbox: (videoWidth, videoHeight) => {
-      // 掃描框改成「長方形」，寬度拉到 90%，專門對付長條形病歷條碼
-      return { width: videoWidth * 0.9, height: 150 };
+      // 2. 針對一維病歷條碼進行黃金比例剪裁（寬度 85%，高度僅 100px）
+      // 縮小辨識區域可以讓 CPU 集中處理條碼條紋，大幅減少運算延遲
+      return { width: videoWidth * 0.85, height: 100 };
     },
+    aspectRatio: 1.777778, // 3. 強制相機採用 16:9 寬螢幕模式，更容易對焦細長條碼
     experimentalFeatures: {
-      useBarCodeDetectorIfSupported: true // 啟用手機原生硬體掃碼加速
+      useBarCodeDetectorIfSupported: true // 4. 優先啟用手機原生硬體加速解碼
     }
   };
 
+  // 5. 新增進階相機硬體約束（對焦與曝光優化）
+  const cameraConstraints = {
+    facingMode: "environment",
+    focusMode: "continuous",     // 連續自動對焦
+    whiteBalanceMode: "continuous" // 連續白平衡
+  };
+
   try {
-    // 嚴格遵守套件規則：只傳入 facingMode
+    // 啟動掃描器並傳入進階參數
     await activeScanner.start(
-      { facingMode: "environment" }, 
+      cameraConstraints, 
       config, 
       async (decodedText) => {
         let finalResult = decodedText.trim();
