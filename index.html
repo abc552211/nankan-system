@@ -2130,7 +2130,7 @@ const { data: appData } = await _supabase.from('consultations')
     
     let currentSelectedAppIndex = null;
 
-    function renderAppSelect() { 
+   function renderAppSelect() { 
   const container = document.getElementById('appCardsContainer'); 
   if (!container) return;
 
@@ -2173,8 +2173,11 @@ const { data: appData } = await _supabase.from('consultations')
         }
       }
 
-      // ✨ 新增：高辨識度的「已預約」視覺標籤
       const reservedBadge = '<span class="badge shadow-sm me-1" style="background-color: #84a59d; color: white; letter-spacing: 1px;">📅 已預約</span>';
+      
+      // ✨ 瘦身邏輯：如果是「待處理」或空白就直接隱藏不顯示，避免跑版
+      let currentStatus = it.status || '待處理';
+      let statusBadge = (currentStatus === '待處理') ? '' : `<span class="badge bg-secondary">${currentStatus}</span>`;
 
       // 諮詢預約小卡
       h += `
@@ -2184,7 +2187,7 @@ const { data: appData } = await _supabase.from('consultations')
             <div>
               ${reservedBadge}
               ${badgeHtml}
-              <span class="badge bg-secondary">${it.status || '待處理'}</span>
+              ${statusBadge}
             </div>
           </div>
           <div class="small fw-bold mt-1" style="color: #84a59d;">📞 電話：${it.phone || '無'}</div>
