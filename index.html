@@ -1053,6 +1053,16 @@
 </head>
 
 <body>
+    <!-- 網頁全域登入密碼驗證遮罩 -->
+    <div id="authOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#1e293b; z-index:99999; justify-content:center; align-items:center; flex-direction:column;">
+        <div style="background:#fff; padding:24px 28px; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.3); width:320px; text-align:center;">
+            <h3 style="margin:0 0 10px 0; color:#1e293b; font-size:16px;">🔐 系統登入驗證</h3>
+            <p style="font-size:12px; color:#64748b; margin-bottom:14px;">請輸入訪問密碼以啟用系統（驗證後此瀏覽器自動記住）</p>
+            <input type="password" id="sitePasswordInput" class="form-control" placeholder="請輸入密碼..." style="width:100%; font-size:14px; text-align:center; padding:8px; margin-bottom:10px;" onkeydown="if(event.key==='Enter') verifySitePassword()">
+            <button class="btn btn-primary" style="width:100%; padding:8px;" onclick="verifySitePassword()">確認進入</button>
+            <div id="authErrMsg" style="font-size:12px; color:#ef4444; margin-top:8px; display:none;">密碼錯誤，請重新輸入！</div>
+        </div>
+    </div>
 
     <!-- =========================================================
          【螢幕操作介面】
@@ -1322,8 +1332,13 @@
                     <tr>
                         <th>編號 (*必填)</th>
                         <td>
-                            <input type="text" id="new_code" placeholder="例：A00099 (不可重複)"
-                                oninput="validateNewClientCode()">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <input type="text" id="new_code" placeholder="例：A00099 (不可重複)" style="flex:1;"
+                                    oninput="validateNewClientCode()">
+                                <label style="font-size:12px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:3px;">
+                                    <input type="checkbox" id="auto_c_code_chk" onchange="handleAutoCCode(this)"> 非兒控自動給號 (C開頭)
+                                </label>
+                            </div>
                             <div id="new_code_msg" style="font-size: 11px; margin-top: 2px;"></div>
                         </td>
                     </tr>
@@ -1383,6 +1398,7 @@
                             <select id="new_fdModify" class="form-control">
                                 <option value="">(空白)</option>
                                 <option value="✓">✓ (打勾)</option>
+                                <option value="非">非 (不適用)</option>
                                 <option value="停用">停用</option>
                             </select>
                         </td>
@@ -1408,29 +1424,59 @@
                     <span style="font-size: 12px; color: #64748b;">左側點擊變數可直接複製，右側 A4 表格完全 1:1 還原列印實體排版</span>
                 </div>
 
-                <!-- 頂部基礎設定 (醫師 / 商品) -->
+                <!-- 頂部基礎設定 (醫師 / 密碼重設 / 商品) -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 12px;">
-                    <div style="background: #f8fafc; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span style="font-size: 12px; font-weight: bold; color: #334155;">醫師名單與眼軸檢測週期 (格式:
-                                醫師名:月數)</span>
-                            <button class="btn btn-success" style="padding: 2px 8px; font-size: 11px;"
-                                onclick="saveDoctorList()">儲存醫師</button>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- 醫師清單 (高度精簡) -->
+                        <div style="background: #f8fafc; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 12px; font-weight: bold; color: #334155;">醫師名單與週期 (格式: 醫師名:月數)</span>
+                                <button class="btn btn-success" style="padding: 2px 8px; font-size: 11px;" onclick="saveDoctorList()">儲存醫師</button>
+                            </div>
+                            <textarea id="doctorListTextarea" class="form-control" style="height: 40px; font-size: 11.5px; padding: 3px 6px;" placeholder="王醫師:12&#10;李醫師:6"></textarea>
                         </div>
-                        <textarea id="doctorListTextarea" class="form-control" style="height: 50px; font-size: 12px;"
-                            placeholder="王醫師:12&#10;李醫師:6"></textarea>
+
+                        <!-- 預留寫入登入密碼與登出控制區 -->
+                        <div style="background: #f8fafc; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 12px; font-weight: bold; color: #334155;">🔑 系統通行密碼設定</span>
+                                <button class="btn btn-secondary" style="padding: 1px 6px; font-size: 10.5px;" onclick="clearBrowserAuth()">清除瀏覽器記住的密碼</button>
+                            </div>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <input type="password" id="sys_new_pwd" class="form-control" placeholder="輸入新密碼儲存於雲端" style="font-size: 11.5px; flex: 1; padding: 3px 6px;">
+                                <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="updateSystemPassword()">更新密碼</button>
+                            </div>
+                            
+                        </div>
                     </div>
 
-                    <div style="background: #f8fafc; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span style="font-size: 12px; font-weight: bold; color: #334155;">商品類型清單維護</span>
-                            <button class="btn btn-success" style="padding: 2px 8px; font-size: 11px;"
-                                onclick="saveProductList()">儲存商品</button>
+                    <div style="background: #f8fafc; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 13px; font-weight: bold; color: #1e293b;">商品類型、LIFF 顯示名與自訂調色盤維護</span>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addProductConfigRow()">+ 新增商品</button>
+                                <button class="btn btn-success" style="padding: 2px 10px; font-size: 11px;" onclick="saveProductConfigTable()">儲存設定至雲端</button>
+                            </div>
                         </div>
-                        <textarea id="productListTextarea" class="form-control" style="height: 50px; font-size: 12px;"
-                            placeholder="二代&#10;BF&#10;標準&#10;HOYA"></textarea>
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
+                            可直接於下方點擊色塊開啟調色盤自訂 LIFF 徽章與時間區塊顏色：
+                        </div>
+                        <div style="max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff;">
+                            <table class="data-table" style="font-size: 12px; width: 100%;">
+                                <thead>
+                                    <tr style="background: #f1f5f9; color: #334155;">
+                                        <th style="width: 20%;">總表商品代碼</th>
+                                        <th style="width: 25%;">LIFF 顯示名稱</th>
+                                        <th style="width: 18%;">卡片類型</th>
+                                        <th style="width: 11%;">徽章顏色</th>
+                                        <th style="width: 11%;">OD顏色</th>
+                                        <th style="width: 11%;">OS顏色</th>
+                                        <th style="width: 4%;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productConfigTbody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -1916,6 +1962,28 @@
                         檔案並匯入 Supabase</button>
                 </div>
             </div>
+            <!-- 一鍵批次替換全客戶商品代碼工具 -->
+                    <div style="background: #fdfdfd; padding: 10px 12px; border: 1px dashed #94a3b8; border-radius: 6px; margin-top: 10px;">
+                        <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">
+                            🔄 一鍵批次替換全客戶商品代碼
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-size: 12px; color: #475569;">原商品代碼：</span>
+                                <select id="batch_replace_old_prod" class="form-control" style="font-size: 12px; min-width: 140px; padding: 4px 6px;"></select>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-size: 12px; color: #475569;">更換為新名稱：</span>
+                                <input type="text" id="batch_replace_new_prod" class="form-control" placeholder="例：三代BF" style="font-size: 12px; width: 140px; padding: 4px 6px;">
+                            </div>
+                            <button class="btn btn-warning" style="padding: 4px 12px; font-size: 12px;" onclick="executeBatchReplaceProduct()">
+                                執行批次更換
+                            </button>
+                        </div>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                            * 執行後將直接替換總表所有符合該舊代碼的客戶資料，並自動同步更新至 Supabase 雲端。
+                        </div>
+                    </div>
         </div>
         <!-- ==================== 頁籤 6：LINE 待綁定維護 ==================== -->
         <div id="tab-unbound" class="tab-content">
@@ -1987,7 +2055,9 @@
         let editHistory = [];
         let doctorList = ["王醫師", "李醫師", "張醫師", "林醫師"];
         let doctorPeriodConfig = { "王醫師": 12, "李醫師": 6, "張醫師": 12, "林醫師": 12 };
+        // 商品結構定義 (支援擴充設定)
         let productList = ["二代", "BF", "標準", "優克", "AD", "HOYA", "酷柏", "星趣", "OK塑型片-Befree (三代Ai)", "HOYA - 新樂學 周邊離焦眼鏡"];
+        let productConfigMap = {}; // 存放 { "BF": { displayName: "角膜
 
         // 樣板清單資料結構
         let customTemplates = [
@@ -2504,6 +2574,9 @@
 
                     if (!error && data && data.data) {
                         const cfg = data.data;
+                        if (cfg.systemPassword) {
+                            systemCloudPassword = String(cfg.systemPassword);
+                        }
                         if (cfg.doctors) {
                             doctorPeriodConfig = cfg.doctors;
                             doctorList = Object.keys(cfg.doctors);
@@ -2511,13 +2584,16 @@
                         if (cfg.products) {
                             productList = cfg.products;
                         }
+                        if (cfg.productConfigMap) {
+                            productConfigMap = cfg.productConfigMap;
+                        }
                         if (cfg.templates) {
                             customTemplates = cfg.templates;
                         }
                     }
                 }
             } catch (err) {
-                console.warn("讀取雲端設定異常，使用預設值：", err);
+                console.warn("讀取雲端設定異常：", err);
             }
 
             updateDropdowns();
@@ -2526,18 +2602,138 @@
             if (txtDoc) {
                 txtDoc.value = Object.entries(doctorPeriodConfig).map(([dr, m]) => `${dr}:${m}`).join('\n');
             }
-            const txtProd = document.getElementById('productListTextarea');
-            if (txtProd) txtProd.value = productList.join('\n');
 
+            renderProductConfigTable();
             renderTemplateEditor();
+        }
+
+        const QUICK_PALETTE = ['#5c8a6b', '#3b82f6', '#8b5cf6', '#d97706', '#ef4444', '#059669', '#0284c7', '#475569', '#1e293b'];
+
+        function renderColorPickerHtml(cls, currentVal) {
+            const dots = QUICK_PALETTE.map(c => `<span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:${c}; cursor:pointer; border:1px solid #cbd5e1;" onclick="this.parentElement.previousElementSibling.value='${c}'" title="${c}"></span>`).join('');
+            return `
+                <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                    <input type="color" class="${cls}" value="${currentVal}" style="width:38px; height:22px; border:1px solid #cbd5e1; border-radius:3px; cursor:pointer;">
+                    <div style="display:flex; gap:2px; flex-wrap:wrap; width:40px; justify-content:center; line-height:1;">${dots}</div>
+                </div>
+            `;
+        }
+
+        function renderProductConfigTable() {
+            const tbody = document.getElementById('productConfigTbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            productList.forEach((pCode, idx) => {
+                const conf = productConfigMap[pCode] || {};
+                const displayName = conf.displayName || pCode;
+                const cardType = conf.cardType || (pCode.includes('HOYA') ? 'defocus_lens' : (pCode.includes('日拋') ? 'defocus_daily' : (pCode.includes('眼鏡') ? 'glasses' : (pCode.includes('RGP') ? 'rgp' : 'ok'))));
+                const badgeColor = conf.badgeColor || '#5c8a6b';
+                const odColor = conf.odColor || '#5c8a6b';
+                const osColor = conf.osColor || '#3b82f6';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="text" class="cell-input prod-row-code" value="${pCode}" placeholder="代碼" style="text-align:center;"></td>
+                    <td><input type="text" class="cell-input prod-row-display" value="${displayName}" placeholder="LIFF顯示名" style="text-align:center;"></td>
+                    <td>
+                        <select class="cell-select prod-row-type" style="padding:2px 4px;">
+                            <option value="ok" ${cardType === 'ok' ? 'selected' : ''}>OK 塑型片</option>
+                            <option value="defocus_lens" ${cardType === 'defocus_lens' ? 'selected' : ''}>離焦大片</option>
+                            <option value="defocus_daily" ${cardType === 'defocus_daily' ? 'selected' : ''}>離焦日拋</option>
+                            <option value="glasses" ${cardType === 'glasses' ? 'selected' : ''}>眼鏡</option>
+                            <option value="rgp" ${cardType === 'rgp' ? 'selected' : ''}>RGP 硬式</option>
+                        </select>
+                    </td>
+                    <td>${renderColorPickerHtml('prod-row-badge-color', badgeColor)}</td>
+                    <td>${renderColorPickerHtml('prod-row-od-color', odColor)}</td>
+                    <td>${renderColorPickerHtml('prod-row-os-color', osColor)}</td>
+                    <td><button class="btn btn-danger" style="padding:1px 5px; font-size:11px;" onclick="removeProductConfigRow(${idx})">✕</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addProductConfigRow() {
+            const pCode = prompt("請輸入新商品代碼 (例: 星趣控):");
+            if (!pCode || !pCode.trim()) return;
+            const code = pCode.trim();
+            if (!productList.includes(code)) {
+                productList.push(code);
+                productConfigMap[code] = {
+                    displayName: code,
+                    cardType: 'ok',
+                    badgeColor: '#5c8a6b',
+                    odColor: '#5c8a6b',
+                    osColor: '#3b82f6'
+                };
+                renderProductConfigTable();
+            } else {
+                alert("此商品代碼已存在！");
+            }
+        }
+
+        function removeProductConfigRow(index) {
+            const code = productList[index];
+            if (!confirm(`確定要移除商品【${code}】嗎？`)) return;
+            productList.splice(index, 1);
+            delete productConfigMap[code];
+            renderProductConfigTable();
+        }
+
+
+        async function saveProductConfigTable() {
+            const tbody = document.getElementById('productConfigTbody');
+            if (!tbody) return;
+
+            const rows = tbody.querySelectorAll('tr');
+            const newProds = [];
+            const newMap = {};
+
+            rows.forEach(tr => {
+                const codeInp = tr.querySelector('.prod-row-code');
+                const dispInp = tr.querySelector('.prod-row-display');
+                const typeSel = tr.querySelector('.prod-row-type');
+                const badgeInp = tr.querySelector('.prod-row-badge-color');
+                const odInp = tr.querySelector('.prod-row-od-color');
+                const osInp = tr.querySelector('.prod-row-os-color');
+
+                const pCode = codeInp ? codeInp.value.trim() : '';
+                if (pCode) {
+                    newProds.push(pCode);
+                    newMap[pCode] = {
+                        displayName: dispInp ? dispInp.value.trim() : pCode,
+                        cardType: typeSel ? typeSel.value : 'ok',
+                        badgeColor: badgeInp ? badgeInp.value : '#5c8a6b',
+                        odColor: odInp ? odInp.value : '#5c8a6b',
+                        osColor: osInp ? osInp.value : '#3b82f6'
+                    };
+                }
+            });
+
+            if (newProds.length === 0) {
+                alert("商品名單不可為空！");
+                return;
+            }
+
+            productList = newProds;
+            productConfigMap = newMap;
+
+            await syncSettingsToSupabase();
+            updateDropdowns();
+            buildProductFilterButtons();
+            applyAllFilters();
+            alert("商品設定與自訂顏色已成功同步儲存至 Supabase 雲端！");
         }
 
         async function syncSettingsToSupabase() {
             if (!supabaseClient) return;
             try {
                 const payload = {
+                    systemPassword: systemCloudPassword,
                     doctors: doctorPeriodConfig,
                     products: productList,
+                    productConfigMap: productConfigMap,
                     templates: customTemplates
                 };
                 const { error } = await supabaseClient
@@ -2570,15 +2766,40 @@
 
         async function saveProductList() {
             const txt = document.getElementById('productListTextarea').value.trim();
-            const list = txt.split('\n').map(s => s.trim()).filter(Boolean);
-            if (list.length === 0) { alert("商品名單不可為空！"); return; }
-            productList = list;
+            const lines = txt.split('\n').map(s => s.trim()).filter(Boolean);
+            if (lines.length === 0) { alert("商品名單不可為空！"); return; }
+
+            const newProds = [];
+            const newMap = {};
+
+            lines.forEach(line => {
+                const parts = line.split(':');
+                const pCode = parts[0].trim();
+                const pDisplay = parts[1] ? parts[1].trim() : pCode;
+                let pType = parts[2] ? parts[2].trim().toLowerCase() : '';
+
+                if (!pType) {
+                    if (pCode.includes('HOYA') || pCode.includes('離焦眼鏡')) pType = 'defocus_lens';
+                    else if (pCode.includes('日拋') || pCode.includes('酷柏')) pType = 'defocus_daily';
+                    else if (pCode.includes('眼鏡')) pType = 'glasses';
+                    else if (pCode.includes('RGP') || pCode.includes('硬式')) pType = 'rgp';
+                    else pType = 'ok';
+                }
+
+                if (pCode) {
+                    newProds.push(pCode);
+                    newMap[pCode] = { displayName: pDisplay, cardType: pType };
+                }
+            });
+
+            productList = newProds;
+            productConfigMap = newMap;
 
             await syncSettingsToSupabase();
             updateDropdowns();
             buildProductFilterButtons();
             applyAllFilters();
-            alert("🎉 商品清單已成功儲存至 Supabase 雲端！");
+            alert("商品清單與 LIFF 顯示設定已成功同步儲存至 Supabase 雲端！");
         }
 
         async function saveTemplatesToStorage() {
@@ -2595,9 +2816,66 @@
             productList.forEach(p => { prodHTML += `<option value="${p}">${p}</option>`; });
             const newProd = document.getElementById('new_product');
             if (newProd) newProd.innerHTML = prodHTML;
+            updateBatchReplaceDropdown();
+        }
+
+        // 系統通行密碼變數 (由 Supabase 雲端載入，程式內不留明文)
+        let systemCloudPassword = "";
+
+        function checkGlobalAuth() {
+            const saved = localStorage.getItem('eye_sys_auth_pass');
+            if (!systemCloudPassword || saved !== systemCloudPassword) {
+                const overlay = document.getElementById('authOverlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const inp = document.getElementById('sitePasswordInput');
+                    if (inp) inp.focus();
+                }
+            } else {
+                const overlay = document.getElementById('authOverlay');
+                if (overlay) overlay.style.display = 'none';
+            }
+        }
+
+        function verifySitePassword() {
+            const val = document.getElementById('sitePasswordInput').value.trim();
+            const errMsg = document.getElementById('authErrMsg');
+            if (systemCloudPassword && val === systemCloudPassword) {
+                localStorage.setItem('eye_sys_auth_pass', val);
+                document.getElementById('authOverlay').style.display = 'none';
+            } else {
+                if (errMsg) errMsg.style.display = 'block';
+            }
+        }
+
+        function clearBrowserAuth() {
+            localStorage.removeItem('eye_sys_auth_pass');
+            alert("已清除此瀏覽器的登入記憶！下次開啟網頁將重新要求輸入密碼。");
+            location.reload();
+        }
+
+        async function updateSystemPassword() {
+            const newPwd = document.getElementById('sys_new_pwd').value.trim();
+            if (!newPwd) { alert("新密碼不可為空！"); return; }
+            if (!confirm(`確定要將系統通行密碼更新並同步至雲端資料庫嗎？`)) return;
+
+            systemCloudPassword = newPwd;
+            localStorage.setItem('eye_sys_auth_pass', newPwd);
+            await syncSettingsToSupabase();
+            document.getElementById('sys_new_pwd').value = '';
+            alert("🎉 系統密碼已成功更新並同步至 Supabase 雲端！");
         }
 
         function switchTab(tabId, btnElement) {
+            // 用途 2：切換至系統維護時驗證雲端密碼
+            if (tabId === 'tab-system') {
+                const inputPwd = prompt("請輸入【系統維護】管理密碼：");
+                if (!systemCloudPassword || inputPwd !== systemCloudPassword) {
+                    alert("密碼錯誤，禁止進入系統維護！");
+                    return;
+                }
+            }
+
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
@@ -2618,7 +2896,6 @@
                 const bulkIn = document.getElementById('bulk_scan_input');
                 if (bulkIn) bulkIn.focus();
             } else if (tabId === 'tab-unbound') {
-                // 切換至 LINE 維護頁籤時自動載入與渲染名單
                 loadUnboundRequests();
             }
         }
@@ -2815,12 +3092,24 @@
                     if (productStr !== currentProductFilter) return false;
                 }
 
-                // 6. 關鍵字搜尋過濾 (嚴格排除照片 Base64，僅比對純文字)
+                // 6. 關鍵字搜尋過濾 (支援 7 碼民國生日自動轉 / 搜尋)
                 if (query) {
                     const codeStr = String(item.code || '').toLowerCase();
                     const nameStr = String(item.name || '').toLowerCase();
                     const idNumStr = String(item.idNumber || '').toLowerCase();
                     const rawPhoneStr = String(item.phone || '');
+                    const rawBirthdayStr = String(item.birthday || '').replace(/\//g, '');
+
+                    // 處理 7 碼生日輸入轉換 (如: 0870119 -> 87/01/19 或 087/01/19)
+                    let queryBirthdayVariants = [];
+                    if (/^\d{7}$/.test(query)) {
+                        const byRaw = query.substring(0, 3);
+                        const byInt = parseInt(byRaw, 10);
+                        const bm = query.substring(3, 5);
+                        const bd = query.substring(5, 7);
+                        queryBirthdayVariants.push(`${byInt}/${bm}/${bd}`);
+                        queryBirthdayVariants.push(`${byRaw}/${bm}/${bd}`);
+                    }
 
                     let uidsText = "";
                     if (Array.isArray(item.line_uids)) {
@@ -2834,8 +3123,11 @@
                     const matchID = idNumStr.includes(query);
                     const matchPhone = rawPhoneStr.includes(query);
                     const matchUid = uidsText.includes(query);
+                    const matchBirthday = (item.birthday && item.birthday.includes(query)) ||
+                                          rawBirthdayStr.includes(query) ||
+                                          queryBirthdayVariants.some(v => (item.birthday || '').includes(v));
 
-                    if (!matchCode && !matchName && !matchID && !matchPhone && !matchUid) return false;
+                    if (!matchCode && !matchName && !matchID && !matchPhone && !matchUid && !matchBirthday) return false;
                 }
 
                 return true;
@@ -2955,6 +3247,7 @@
                 select.innerHTML = `
                 <option value="" ${originalVal === '' ? 'selected' : ''}></option>
                 <option value="✓" ${originalVal === '✓' ? 'selected' : ''}>✓ (打勾)</option>
+                <option value="非" ${originalVal === '非' ? 'selected' : ''}>非 (不適用)</option>
                 <option value="停用" ${originalVal === '停用' ? 'selected' : ''}>停用</option>
             `;
                 td.appendChild(select);
@@ -3074,6 +3367,7 @@
 
             try {
                 await loadSettings();
+                checkGlobalAuth();
 
                 if (supabaseClient) {
                     // 1. 初次讀取所有客戶資料
@@ -3103,6 +3397,7 @@
                             calculateDynamicFields(item);
                         });
                         rawClients = data;
+                        updateDropdowns(); // ★ 加上這一行：資料庫讀取完畢後立刻重新計
                     }
 
                     // 2. 建立 Realtime 即時推播監聽 (家長一綁定，後台自動秒級同步，免按 F5)
@@ -4444,6 +4739,21 @@
                     ? `<img src="${req.liff_pic}" style="width:28px; height:28px; border-radius:50%; vertical-align:middle; margin-right:6px; object-fit:cover; border:1px solid #cbd5e1;">`
                     : `<span style="display:inline-block; width:28px; height:28px; border-radius:50%; background:#e2e8f0; color:#64748b; text-align:center; line-height:28px; font-size:12px; vertical-align:middle; margin-right:6px;">👤</span>`;
 
+                let actionBtns = '';
+                if (req.status === 'pending') {
+                    actionBtns = `
+                        <button class="btn btn-success" style="padding:2px 8px; font-size:11px;" onclick="manualBindPrompt(${req.id}, '${req.uid}', '${req.name}')">手動關聯</button>
+                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:11px;" onclick="ignoreUnboundRequest(${req.id})">忽略</button>
+                    `;
+                } else if (req.status === 'ignored') {
+                    actionBtns = `
+                        <button class="btn btn-warning" style="padding:2px 6px; font-size:11px;" onclick="restoreUnboundRequest(${req.id})">復原</button>
+                        <button class="btn btn-danger" style="padding:2px 6px; font-size:11px;" onclick="deleteUnboundRequest(${req.id})">刪除</button>
+                    `;
+                } else {
+                    actionBtns = `<button class="btn btn-danger" style="padding:2px 6px; font-size:11px;" onclick="deleteUnboundRequest(${req.id})">刪除紀錄</button>`;
+                }
+
                 tr.innerHTML = `
                 <td>${idx + 1}</td>
                 <td>${timeStr}</td>
@@ -4458,56 +4768,179 @@
                 <td>${req.birthday || '-'}</td>
                 <td style="font-family:monospace; font-size:11px;">${req.uid || '-'}</td>
                 <td>${statusBadge}</td>
-                <td>
-                    ${req.status === 'pending' ? `
-                        <button class="btn btn-success" style="padding:2px 8px; font-size:11px;" onclick="manualBindPrompt(${req.id}, '${req.uid}', '${req.name}')">手動關聯</button>
-                        <button class="btn btn-secondary" style="padding:2px 6px; font-size:11px;" onclick="ignoreUnboundRequest(${req.id})">忽略</button>
-                    ` : `<button class="btn btn-danger" style="padding:2px 6px; font-size:11px;" onclick="deleteUnboundRequest(${req.id})">刪除紀錄</button>`}
-                </td>
+                <td>${actionBtns}</td>
             `;
                 tbody.appendChild(tr);
             });
         }
 
-        async function manualBindPrompt(reqId, uid, guestName) {
-            const targetCode = prompt(`請輸入要將此家長 (${guestName}) 關聯綁定的【客戶編號】：`);
-            if (!targetCode) return;
+        function getNextCCode() {
+            let maxNum = 0;
+            rawClients.forEach(c => {
+                const code = String(c.code || '').trim().toUpperCase();
+                if (/^C\d+$/.test(code)) {
+                    const num = parseInt(code.substring(1), 10);
+                    if (!isNaN(num) && num > maxNum) maxNum = num;
+                }
+            });
+            const nextNum = maxNum + 1;
+            return 'C' + String(nextNum).padStart(5, '0');
+        }
 
-            const client = rawClients.find(c => c.code.toLowerCase() === targetCode.trim().toLowerCase());
-            if (!client) {
-                alert(`查無此客戶編號：${targetCode}`);
+        function handleAutoCCode(chk) {
+            const codeInput = document.getElementById('new_code');
+            if (!codeInput) return;
+            if (chk.checked) {
+                codeInput.value = getNextCCode();
+                codeInput.disabled = true;
+            } else {
+                codeInput.value = '';
+                codeInput.disabled = false;
+            }
+            validateNewClientCode();
+        }
+
+        let currentBindReq = null;
+
+        function manualBindPrompt(reqId, uid, guestName) {
+            const reqItem = unboundList.find(r => r.id === reqId);
+            currentBindReq = reqItem || { id: reqId, uid: uid, name: guestName, phone: '', birthday: '' };
+
+            document.getElementById('bind_modal_name').innerText = currentBindReq.name || guestName || '-';
+            document.getElementById('bind_modal_phone').innerText = currentBindReq.phone || '-';
+            document.getElementById('bind_modal_birthday').innerText = currentBindReq.birthday || '-';
+            document.getElementById('bind_modal_uid').innerText = currentBindReq.uid || uid || '-';
+
+            const codeInput = document.getElementById('bind_modal_code_input');
+            const autoChk = document.getElementById('bind_modal_auto_c_chk');
+
+            autoChk.checked = false;
+            codeInput.disabled = false;
+            codeInput.value = '';
+            codeInput.focus();
+
+            document.getElementById('manualBindModal').style.display = 'flex';
+        }
+
+        function closeManualBindModal() {
+            document.getElementById('manualBindModal').style.display = 'none';
+            currentBindReq = null;
+        }
+
+        function toggleManualBindAutoC(chk) {
+            const codeInput = document.getElementById('bind_modal_code_input');
+            if (!codeInput) return;
+
+            if (chk.checked) {
+                codeInput.value = getNextCCode();
+                codeInput.disabled = true;
+            } else {
+                codeInput.value = '';
+                codeInput.disabled = false;
+                codeInput.focus();
+            }
+        }
+
+        async function confirmManualBind() {
+            if (!currentBindReq) return;
+
+            const codeInput = document.getElementById('bind_modal_code_input');
+            const isAutoC = document.getElementById('bind_modal_auto_c_chk').checked;
+            const targetCode = codeInput.value.trim().toUpperCase();
+
+            if (!targetCode) {
+                alert("請輸入客戶編號或勾選自動給號！");
                 return;
             }
 
-            if (!confirm(`確定要將此 LINE UID 綁定至客戶【${client.name} (${client.code})】嗎？`)) return;
+            const uid = currentBindReq.uid;
+            const reqId = currentBindReq.id;
+            let client = rawClients.find(c => (c.code || '').toUpperCase() === targetCode);
 
-            try {
-                // 1. 將 UID 加入客戶的 line_uids 陣列
-                let currentUids = client.line_uids || [];
-                if (!Array.isArray(currentUids)) currentUids = [];
-                if (!currentUids.includes(uid)) {
-                    currentUids.push(uid);
+            if (client) {
+                // 1. 現有客戶：關聯 UID
+                if (!confirm(`確定要將此 LINE 帳號綁定至現有客戶【${client.name} (${client.code})】嗎？`)) return;
+
+                try {
+                    let currentUids = client.line_uids || [];
+                    if (!Array.isArray(currentUids)) currentUids = [];
+                    if (!currentUids.includes(uid)) currentUids.push(uid);
+                    client.line_uids = currentUids;
+
+                    if (supabaseClient) {
+                        await supabaseClient
+                            .from('customers')
+                            .update({ line_uids: currentUids })
+                            .eq('code', client.code);
+
+                        await supabaseClient
+                            .from('unbound_requests')
+                            .update({ status: 'resolved', matched_code: client.code })
+                            .eq('id', reqId);
+                    }
+
+                    alert(`🎉 綁定成功！客戶【${client.name}】已成功關聯此 LINE 帳號。`);
+                    closeManualBindModal();
+                    await loadUnboundRequests();
+                    applyAllFilters();
+                } catch (err) {
+                    console.error("手動綁定失敗：", err);
+                    alert("手動綁定失敗：" + err.message);
                 }
-                client.line_uids = currentUids;
+            } else {
+                // 2. 查無編號（包含非兒控自動給號）：直接於總表建立新客戶並綁定
+                if (!confirm(`系統中尚無編號【${targetCode}】。\n是否自動以編號【${targetCode}】建立【${currentBindReq.name}】之客戶資料並直接完成 LINE 綁定？`)) return;
 
-                // 2. 更新客戶至 Supabase
-                await supabaseClient
-                    .from('customers')
-                    .update({ line_uids: currentUids })
-                    .eq('code', client.code);
+                const newObj = {
+                    code: targetCode,
+                    name: currentBindReq.name || '新客戶',
+                    birthday: currentBindReq.birthday || '',
+                    phone: currentBindReq.phone || '',
+                    product: '未定義',
+                    line_uids: [uid],
+                    fdModify: '非',
+                    lastVisit: '',
+                    alCheckDate: '',
+                    alOD: '',
+                    alOS: '',
+                    odChangeDate: '',
+                    odDuration: '',
+                    osChangeDate: '',
+                    osDuration: '',
+                    firstPickup: '',
+                    serviceDate: '',
+                    contactDate: '',
+                    longRemark: '',
+                    overdueDays: '0',
+                    odAccumDays: '',
+                    osAccumDays: ''
+                };
 
-                // 3. 更新 unbound_requests 狀態為 resolved
-                await supabaseClient
-                    .from('unbound_requests')
-                    .update({ status: 'resolved', matched_code: client.code })
-                    .eq('id', reqId);
+                calculateDynamicFields(newObj);
 
-                alert(`🎉 綁定成功！客戶【${client.name}】已成功關聯此家長 LINE 帳號。`);
-                await loadUnboundRequests();
-                applyAllFilters();
-            } catch (err) {
-                console.error("手動綁定失敗：", err);
-                alert("手動綁定失敗：" + err.message);
+                try {
+                    if (supabaseClient) {
+                        const { error } = await supabaseClient
+                            .from('customers')
+                            .insert([newObj]);
+
+                        if (error) throw error;
+
+                        await supabaseClient
+                            .from('unbound_requests')
+                            .update({ status: 'resolved', matched_code: targetCode })
+                            .eq('id', reqId);
+                    }
+
+                    rawClients.unshift(newObj);
+                    alert(`🎉 成功以【${targetCode}】新增客戶【${newObj.name}】至總表並完成 LINE 綁定！`);
+                    closeManualBindModal();
+                    await loadUnboundRequests();
+                    applyAllFilters();
+                } catch (err) {
+                    console.error("建立客戶並關聯失敗：", err);
+                    alert("建立客戶並關聯失敗：" + err.message);
+                }
             }
         }
 
@@ -4523,6 +4956,20 @@
                 alert("操作失敗：" + err.message);
             }
         }
+
+        async function restoreUnboundRequest(reqId) {
+            try {
+                await supabaseClient
+                    .from('unbound_requests')
+                    .update({ status: 'pending' })
+                    .eq('id', reqId);
+                await loadUnboundRequests();
+            } catch (err) {
+                alert("復原失敗：" + err.message);
+            }
+        }
+
+        
 
         async function deleteUnboundRequest(reqId) {
             if (!confirm("確定要刪除此筆歷史紀錄嗎？")) return;
@@ -4721,6 +5168,98 @@
                 console.error("雲端更新失敗：", err);
             }
         }
+        // 1. 刷新批次更換專用的舊商品下拉選單
+        function updateBatchReplaceDropdown() {
+            const select = document.getElementById('batch_replace_old_prod');
+            if (!select) return;
+
+            // 統計所有客戶實際擁有的商品代碼（含未在設定清單中的舊代碼）
+            const usedProducts = Array.from(new Set(rawClients.map(c => (c.product || '').trim()).filter(Boolean)));
+            if (usedProducts.length === 0) {
+                productList.forEach(p => { if (!usedProducts.includes(p)) usedProducts.push(p); });
+            }
+
+            let html = '<option value="">請選擇欲替換的舊代碼</option>';
+            usedProducts.forEach(p => {
+                const count = rawClients.filter(c => (c.product || '').trim() === p).length;
+                html += `<option value="${p}">${p} (${count} 筆客戶)</option>`;
+            });
+            select.innerHTML = html;
+        }
+
+        // 2. 執行批次替換核心邏輯
+        async function executeBatchReplaceProduct() {
+            const oldProd = document.getElementById('batch_replace_old_prod').value.trim();
+            const newProd = document.getElementById('batch_replace_new_prod').value.trim();
+
+            if (!oldProd) {
+                alert("請先選擇要替換的原商品代碼！");
+                return;
+            }
+            if (!newProd) {
+                alert("請輸入更換後的新名稱！");
+                return;
+            }
+            if (oldProd === newProd) {
+                alert("原商品代碼與新名稱相同，無須替換！");
+                return;
+            }
+
+            // 計算影響筆數
+            const targetClients = rawClients.filter(c => (c.product || '').trim() === oldProd);
+            if (targetClients.length === 0) {
+                alert(`查無商品代碼為【${oldProd}】的客戶！`);
+                return;
+            }
+
+            if (!confirm(`確定要將【${targetClients.length}】位客戶的商品由【${oldProd}】批量更換為【${newProd}】嗎？\n更換後將自動同步更新雲端資料庫！`)) {
+                return;
+            }
+
+            // (1) 批次更新客戶陣列中的 product 欄位
+            targetClients.forEach(c => {
+                recordEditHistory(c.code, 'product', c.product);
+                c.product = newProd;
+            });
+
+            // (2) 同步更新商品設定清單 (productList 與 productConfigMap)
+            const pIdx = productList.indexOf(oldProd);
+            if (pIdx !== -1) {
+                productList[pIdx] = newProd;
+            } else if (!productList.includes(newProd)) {
+                productList.push(newProd);
+            }
+
+            // 轉移原本的 LIFF 顏色與卡片設定至新代碼
+            if (productConfigMap[oldProd]) {
+                productConfigMap[newProd] = {
+                    ...productConfigMap[oldProd],
+                    displayName: productConfigMap[oldProd].displayName === oldProd ? newProd : productConfigMap[oldProd].displayName
+                };
+                delete productConfigMap[oldProd];
+            } else if (!productConfigMap[newProd]) {
+                productConfigMap[newProd] = {
+                    displayName: newProd,
+                    cardType: 'ok',
+                    badgeColor: '#5c8a6b',
+                    odColor: '#5c8a6b',
+                    osColor: '#3b82f6'
+                };
+            }
+
+            // (3) 同步儲存設定與所有客戶至 Supabase 雲端
+            await syncSettingsToSupabase();
+            await saveAllChanges();
+
+            // (4) 重新渲染畫面所有元件
+            updateDropdowns();
+            renderProductConfigTable();
+            buildProductFilterButtons();
+            applyAllFilters();
+
+            document.getElementById('batch_replace_new_prod').value = '';
+            alert(`🎉 成功將 ${targetClients.length} 筆客戶商品代碼由【${oldProd}】更換為【${newProd}】！`);
+        }
 
         document.addEventListener("DOMContentLoaded", initApp);
     </script>
@@ -4804,6 +5343,42 @@
                     onclick="removeCurrentPhoto()">刪除照片</button>
                 <button class="btn btn-secondary" style="font-size:13px; padding:6px 14px;"
                     onclick="closePhotoModal()">關閉</button>
+            </div>
+        </div>
+    </div>
+    <!-- 手動關聯專屬彈窗 -->
+    <div id="manualBindModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        <div style="background:#fff; border-radius:8px; padding:20px; width:440px; max-width:92%; box-shadow:0 4px 20px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; font-size:15px; color:#1e293b;">🔗 手動指派與關聯客戶</h3>
+                <button onclick="closeManualBindModal()" style="border:none; background:none; font-size:18px; cursor:pointer; color:#64748b;">✕</button>
+            </div>
+
+            <!-- 申請資料摘要 -->
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; font-size:12.5px; line-height:1.6; margin-bottom:14px; color:#334155;">
+                <div><b>申請姓名：</b><span id="bind_modal_name" style="color:#1e3a8a; font-weight:bold;">-</span></div>
+                <div><b>留存電話：</b><span id="bind_modal_phone">-</span></div>
+                <div><b>留存生日：</b><span id="bind_modal_birthday">-</span></div>
+                <div style="word-break:break-all; font-size:11.5px; color:#64748b;"><b>LINE UID：</b><span id="bind_modal_uid">-</span></div>
+            </div>
+
+            <!-- 輸入與開關區 -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:13px; font-weight:bold; color:#1e293b; display:block; margin-bottom:4px;">指定關聯客戶編號：</label>
+                <input type="text" id="bind_modal_code_input" class="form-control" style="width:100%; font-size:14px; font-weight:bold; padding:8px 10px;" placeholder="請輸入現有編號 (例：A00099)">
+                
+                <label style="margin-top:8px; display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:#0f172a; cursor:pointer;">
+                    <input type="checkbox" id="bind_modal_auto_c_chk" onchange="toggleManualBindAutoC(this)">
+                    <b>非兒控自動給號 (C開頭)</b>
+                </label>
+                <div id="bind_modal_hint" style="font-size:11.5px; color:#64748b; margin-top:4px;">* 勾選自動取號若總表無此人，將自動建立新客戶並直接綁定。</div>
+            </div>
+
+            <!-- 操作按鈕 -->
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button class="btn btn-secondary" style="font-size:12.5px; padding:6px 14px;" onclick="closeManualBindModal()">取消</button>
+                <button class="btn btn-success" style="font-size:12.5px; padding:6px 16px;" onclick="confirmManualBind()">確認關聯</button>
             </div>
         </div>
     </div>
