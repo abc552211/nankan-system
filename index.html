@@ -3231,7 +3231,15 @@
             if (!tbody) return;
             tbody.innerHTML = '';
             const summary = document.getElementById('table-summary');
-            if (summary) summary.innerText = `共符合 ${currentDisplay.length} 筆資料`;
+            if (summary) {
+                if (hasUnsavedChanges) {
+                    summary.innerText = `共符合 ${currentDisplay.length} 筆資料 (⚠️ 有尚未儲存的修改)`;
+                    summary.style.color = '#d97706';
+                } else {
+                    summary.innerText = `共符合 ${currentDisplay.length} 筆資料`;
+                    summary.style.color = '#2c3e50';
+                }
+            }
             
             updateDbStorageUsage();
 
