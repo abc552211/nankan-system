@@ -932,7 +932,7 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 6mm 8mm 6mm 8mm;
+                margin: 5mm 7mm 5mm 7mm;
             }
 
             body {
@@ -955,11 +955,12 @@
 
             .print-page-item {
                 page-break-after: always;
-                height: 98vh;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
+                page-break-inside: avoid;
+                break-inside: avoid;
                 box-sizing: border-box;
+                width: 100%;
+                height: auto;
+                max-height: 100%;
             }
 
             .print-page-item:last-child {
@@ -968,12 +969,11 @@
 
             .print-sheet {
                 width: 100%;
-                height: 100%;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                font-size: 11pt;
-                line-height: 1.35;
+                display: block;
+                font-size: 10.5pt;
+                line-height: 1.3;
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
 
             .header-info-table {
@@ -1068,15 +1068,37 @@
          【螢幕操作介面】
          ========================================================= -->
     <div id="screen-view">
-        <!-- 頂部頁籤 (簡約無 Emoji) -->
-        <div class="nav-tabs">
-            <button class="tab-btn active" onclick="switchTab('tab-main', this)">客戶追蹤總表</button>
-            <button class="tab-btn" onclick="switchTab('tab-batch-update', this)">刷槍快速更新</button>
-            <button class="tab-btn" onclick="switchTab('tab-batch-print', this)">批量回診單印製</button>
-            <button class="tab-btn" onclick="switchTab('tab-new-client', this)">新增客戶資料</button>
-            <button class="tab-btn" onclick="switchTab('tab-unbound', this)">LINE 待綁定維護 <span id="unbound_badge"
-                    style="background:#ef4444; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; display:none;">0</span></button>
-            <button class="tab-btn" onclick="switchTab('tab-system', this)">系統維護</button>
+        <!-- 頂部頁籤 (右側整合超扁雲端監控) -->
+        <div class="nav-tabs" style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div style="display: flex; gap: 4px; align-items: flex-end;">
+                <button class="tab-btn active" onclick="switchTab('tab-main', this)">客戶追蹤總表</button>
+                <button class="tab-btn" onclick="switchTab('tab-batch-update', this)">刷槍快速更新</button>
+                <button class="tab-btn" onclick="switchTab('tab-batch-print', this)">批量回診單印製</button>
+                <button class="tab-btn" onclick="switchTab('tab-new-client', this)">新增客戶資料</button>
+                <button class="tab-btn" onclick="switchTab('tab-unbound', this)">LINE 待綁定維護 <span id="unbound_badge"
+                        style="background:#ef4444; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; display:none;">0</span></button>
+                <button class="tab-btn" onclick="switchTab('tab-system', this)">系統維護</button>
+            </div>
+
+            <!-- 最右上角超扁監控進度條 (藍線上方) -->
+            <div id="db-storage-box" style="display: flex; flex-direction: column; gap: 2px; font-size: 10px; background: #f8fafc; border: 1px solid #cbd5e1; border-bottom: none; border-radius: 4px 4px 0 0; padding: 2px 8px; margin-bottom: -2px; line-height: 1.15; z-index: 2;">
+                <!-- 儲存容量 -->
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <span style="color: #475569; font-weight: bold; min-width: 44px;">DataCapacity:</span>
+                    <div style="width: 50px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; display: inline-block;">
+                        <div id="db-storage-bar" style="width: 0%; height: 100%; background: #10b981;"></div>
+                    </div>
+                    <span id="db-storage-text" style="font-weight: bold; color: #1e293b; font-size: 9.5px;">0 MB (0%)</span>
+                </div>
+                <!-- 即時廣播 -->
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <span style="color: #475569; font-weight: bold; min-width: 44px;">RealTime:</span>
+                    <div style="width: 50px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; display: inline-block;">
+                        <div id="rt-msg-bar" style="width: 0%; height: 100%; background: #3b82f6;"></div>
+                    </div>
+                    <span id="rt-msg-text" style="font-weight: bold; color: #1e293b; font-size: 9.5px;">0 / 200萬 (0%)</span>
+                </div>
+            </div>
         </div>
 
         <!-- ==================== 頁籤 1：客戶追蹤總表 ==================== -->
@@ -1919,36 +1941,31 @@
                                     </tr>
                                 </table>
 
-                                <!-- 第 11 與 12 列 (表尾大空間手寫區) -->
                                 <table class="footer-table">
-                                    <tr class="section-separator-top" style="height: 115px;">
-                                        <td style="width: 68%; vertical-align: top;">
-                                            <div>備註：<span class="fill-bold">{long_remark}</span></div>
-                                        </td>
-                                        <td style="width: 32%; text-align: right; vertical-align: top;">
-                                            <div style="font-size: 11pt; line-height: 1.5;">
-                                                建議下次回診間隔：<br>
-
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="2" style="padding-top: 8px;">
-                                            <div
-                                                style="display: flex; justify-content: space-between; align-items: flex-end;">
-                                                <div>
-                                                    <div style="font-size: 11pt;">售服於 &nbsp;<span
-                                                            class="fill-bold">{service_date}</span> &nbsp;前。</div>
-                                                    <div style="font-size: 10pt; margin-top: 4px;"><span
-                                                            class="chk"></span>本次未看診，已建議應定期回診。</div>
-                                                </div>
-                                                <div class="hint-check-items" style="font-size: 11pt;">
-                                                    {hint_check_items}
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
+                    <tr class="section-separator-top" style="height: 85px;">
+                        <td style="width: 68%; vertical-align: top; padding: 6px 8px;">
+                            <div>備註：<span class="fill-bold">${varMap["{long_remark}"]}</span></div>
+                        </td>
+                        <td style="width: 32%; text-align: right; vertical-align: top; padding: 6px 8px;">
+                            <div style="font-size: 10.5pt; line-height: 1.4;">
+                                建議下次回診間隔：
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="padding: 4px 8px 6px 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                                <div>
+                                    ${serviceDateText}
+                                    <div style="font-size: 9.5pt; margin-top: 2px;"><span class="chk"></span>本次未看診，已建議應定期回診。</div>
+                                </div>
+                                <div class="hint-check-items" style="font-size: 10pt;">
+                                    ${varMap["{hint_check_items}"]}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
                             </div>
                         </div>
                     </div>
@@ -3138,12 +3155,74 @@
             renderTableWithPagination();
         }
 
+        // 累計即時訊息計數器 (記錄於 localStorage，確保跨重新整理持續累計)
+        let rtMsgCounter = parseInt(localStorage.getItem('eye_rt_msg_count') || '6005', 10);
+
+        function trackRealtimeMessage(count = 1) {
+            rtMsgCounter += count;
+            localStorage.setItem('eye_rt_msg_count', rtMsgCounter);
+            updateDbStorageUsage();
+        }
+
+        function updateDbStorageUsage() {
+            // 1. 儲存容量監控 (500 MB)
+            const maxMB = 500;
+            const strData = JSON.stringify(rawClients);
+            const bytes = new Blob([strData]).size;
+            const usedMB = bytes / (1024 * 1024);
+            const percentMB = Math.min(100, (usedMB / maxMB) * 100);
+
+            const barMB = document.getElementById('db-storage-bar');
+            const textMB = document.getElementById('db-storage-text');
+
+            if (barMB && textMB) {
+                barMB.style.width = `${Math.max(percentMB, 0.5).toFixed(1)}%`;
+                textMB.innerText = `${usedMB.toFixed(2)} MB / ${maxMB} MB (${percentMB.toFixed(1)}%)`;
+
+                if (percentMB >= 85) {
+                    barMB.style.background = '#ef4444';
+                    textMB.style.color = '#dc2626';
+                } else if (percentMB >= 60) {
+                    barMB.style.background = '#f59e0b';
+                    textMB.style.color = '#d97706';
+                } else {
+                    barMB.style.background = '#10b981';
+                    textMB.style.color = '#1e293b';
+                }
+            }
+
+            // 2. 即時廣播訊息監控 (2,000,000 則)
+            const maxMsg = 2000000;
+            const percentMsg = Math.min(100, (rtMsgCounter / maxMsg) * 100);
+
+            const barMsg = document.getElementById('rt-msg-bar');
+            const textMsg = document.getElementById('rt-msg-text');
+
+            if (barMsg && textMsg) {
+                barMsg.style.width = `${Math.max(percentMsg, 0.5).toFixed(1)}%`;
+                textMsg.innerText = `${rtMsgCounter.toLocaleString()} / 200萬則 (${percentMsg.toFixed(2)}%)`;
+
+                if (percentMsg >= 85) {
+                    barMsg.style.background = '#ef4444';
+                    textMsg.style.color = '#dc2626';
+                } else if (percentMsg >= 60) {
+                    barMsg.style.background = '#f59e0b';
+                    textMsg.style.color = '#d97706';
+                } else {
+                    barMsg.style.background = '#3b82f6';
+                    textMsg.style.color = '#1e293b';
+                }
+            }
+        }
+
         function renderTableWithPagination() {
             const tbody = document.getElementById('customerTableBody');
             if (!tbody) return;
             tbody.innerHTML = '';
             const summary = document.getElementById('table-summary');
             if (summary) summary.innerText = `共符合 ${currentDisplay.length} 筆資料`;
+            
+            updateDbStorageUsage();
 
             if (currentDisplay.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${columnOrder.length}" style="padding: 20px; color: #888;">無符合條件的客戶資料</td></tr>`;
@@ -3404,6 +3483,7 @@
                     supabaseClient
                         .channel('realtime_customers_channel')
                         .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
+                            trackRealtimeMessage(1);
                             if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
                                 const updatedRow = payload.new;
                                 const idx = rawClients.findIndex(c => c.code === updatedRow.code);
@@ -3442,6 +3522,7 @@
                     supabaseClient
                         .channel('realtime_unbound_channel')
                         .on('postgres_changes', { event: '*', schema: 'public', table: 'unbound_requests' }, () => {
+                            trackRealtimeMessage(1);
                             if (typeof loadUnboundRequests === 'function') {
                                 loadUnboundRequests();
                             }
