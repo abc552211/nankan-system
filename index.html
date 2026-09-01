@@ -1079,6 +1079,92 @@
             padding-bottom: 10px !important;
             /* 加大下方間隔，區隔更明顯 */
         }
+
+        /* ================= 蜂巢式六角形調色盤樣式 ================= */
+        .honeycomb-btn {
+            width: 28px;
+            height: 24px;
+            border-radius: 4px;
+            border: 1.5px solid #cbd5e1;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.1s, border-color 0.1s;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .honeycomb-btn:hover {
+            transform: scale(1.1);
+            border-color: #3b82f6;
+        }
+
+        #honeycombModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 100005;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .honeycomb-card {
+            background: #fff;
+            padding: 16px 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            position: relative;
+            user-select: none;
+        }
+
+        .honeycomb-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .honeycomb-row {
+            display: flex;
+            justify-content: center;
+            margin-top: -5px;
+            /* 緊密交錯貼合 */
+        }
+
+        /* 六角形單元格 (利用 clip-path 裁切成正六角形) */
+        .hex-cell {
+            width: 22px;
+            height: 25px;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            margin: 0 1.5px;
+            cursor: pointer;
+            transition: transform 0.12s ease, filter 0.12s ease;
+        }
+
+        .hex-cell:hover {
+            transform: scale(1.35);
+            z-index: 10;
+            filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.5));
+        }
+
+        .recent-color-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            cursor: pointer;
+            transition: transform 0.12s ease;
+        }
+
+        .recent-color-dot:hover {
+            transform: scale(1.25);
+            border-color: #0284c7;
+            box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+        }
     </style>
 </head>
 
@@ -1546,12 +1632,14 @@
                             <table class="data-table" style="font-size: 12px; width: 100%;">
                                 <thead>
                                     <tr style="background: #f1f5f9; color: #334155;">
-                                        <th style="width: 20%;">總表商品代碼</th>
-                                        <th style="width: 25%;">LIFF 顯示名稱</th>
-                                        <th style="width: 18%;">卡片類型</th>
-                                        <th style="width: 11%;">徽章顏色</th>
-                                        <th style="width: 11%;">OD顏色</th>
-                                        <th style="width: 11%;">OS顏色</th>
+                                        <th style="width: 16%;">總表商品代碼</th>
+                                        <th style="width: 18%;">LIFF 顯示名稱</th>
+                                        <th style="width: 15%;">卡片類型</th>
+                                        <th style="width: 9%;">徽章顏色</th>
+                                        <th style="width: 9%;">OD/時間</th>
+                                        <th style="width: 9%;">OS/時間</th>
+                                        <th style="width: 10%;" title="勾選：紀錄照模式(浮水印不帶OD/OS)">紀錄照</th>
+                                        <th style="width: 10%;" title="勾選：顯示長期備註區塊">長期備註</th>
                                         <th style="width: 4%;">操作</th>
                                     </tr>
                                 </thead>
@@ -2727,16 +2815,118 @@
             renderTemplateEditor();
         }
 
-        const QUICK_PALETTE = ['#5c8a6b', '#3b82f6', '#8b5cf6', '#d97706', '#ef4444', '#059669', '#0284c7', '#475569', '#1e293b'];
+        // ==========================================
+        // 蜂巢六角形調色盤引擎 (支援標準色輪 + 自定義選色 + 常用暫存色盤)
+        // ==========================================
+        let currentTargetColorInput = null;
+
+        // 讀取瀏覽器記錄的常用顏色 (預設放 8 個常用基本色)
+        let recentColors = JSON.parse(localStorage.getItem('eye_recent_colors') || '["#5c8a6b", "#3b82f6", "#8b5cf6", "#d97706", "#ef4444", "#059669", "#0284c7", "#475569"]');
+
+        const HONEYCOMB_ROWS = [
+            ["#003366", "#336699", "#3366cc", "#003399", "#000099", "#0000cc", "#000066"],
+            ["#006666", "#006699", "#0099cc", "#0066cc", "#0033cc", "#0000ff", "#3333ff", "#333399"],
+            ["#669999", "#009999", "#33cccc", "#00ccff", "#0099ff", "#0066ff", "#3366ff", "#6666ff", "#6666cc"],
+            ["#339966", "#00cc99", "#00ffcc", "#00ffff", "#33ccff", "#3399ff", "#6699ff", "#6666ff", "#9966ff", "#9933ff"],
+            ["#339933", "#00cc66", "#00ff99", "#66ffcc", "#66ffff", "#66ccff", "#99ccff", "#9999ff", "#cc99ff", "#cc66ff", "#cc33ff"],
+            ["#006600", "#00cc00", "#00ff00", "#66ff66", "#99ff99", "#ccffff", "#ccccff", "#e0b0ff", "#ff99ff", "#ff66ff", "#ff00ff", "#cc00cc"],
+            ["#003300", "#009900", "#33cc33", "#66ff33", "#99ff66", "#ccffcc", "#ffffff", "#ffccff", "#ff99cc", "#ff66cc", "#ff00cc", "#cc0099", "#990066"],
+            ["#666600", "#99cc00", "#ccff66", "#ccff33", "#ffff66", "#ffff99", "#ffffcc", "#ffcccc", "#ff9999", "#ff6699", "#ff3399", "#cc0066"],
+            ["#999900", "#cccc00", "#ffff00", "#ffcc00", "#ffcc66", "#ff9933", "#ff9966", "#ff6666", "#ff3366", "#cc3366", "#990033"],
+            ["#996600", "#cc9900", "#ff9900", "#ff6600", "#ff6633", "#ff3333", "#ff0000", "#cc0000", "#990000", "#660000"],
+            ["#663300", "#996633", "#cc6600", "#cc3300", "#993300", "#990000", "#800000", "#4d0000", "#330000"],
+            ["#331a00", "#663300", "#804000", "#994d00", "#802b00", "#661a00", "#4d0000", "#260000"],
+            ["#000000", "#1a1a1a", "#333333", "#4d4d4d", "#666666", "#808080", "#999999"]
+        ];
 
         function renderColorPickerHtml(cls, currentVal) {
-            const dots = QUICK_PALETTE.map(c => `<span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:${c}; cursor:pointer; border:1px solid #cbd5e1;" onclick="this.parentElement.previousElementSibling.value='${c}'" title="${c}"></span>`).join('');
+            const safeCol = currentVal || '#5c8a6b';
             return `
-                <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
-                    <input type="color" class="${cls}" value="${currentVal}" style="width:38px; height:22px; border:1px solid #cbd5e1; border-radius:3px; cursor:pointer;">
-                    <div style="display:flex; gap:2px; flex-wrap:wrap; width:40px; justify-content:center; line-height:1;">${dots}</div>
+                <div style="display:flex; justify-content:center; align-items:center;">
+                    <input type="hidden" class="${cls}" value="${safeCol}">
+                    <div class="honeycomb-btn" style="background-color: ${safeCol};" onclick="openHoneycombPicker(this)" title="點擊展開調色盤 (目前: ${safeCol})"></div>
                 </div>
             `;
+        }
+
+        // 渲染常用暫存顏色清單
+        function renderRecentColors() {
+            const box = document.getElementById('recentColorsBox');
+            if (!box) return;
+            box.innerHTML = '';
+            recentColors.forEach(c => {
+                const dot = document.createElement('div');
+                dot.className = 'recent-color-dot';
+                dot.style.backgroundColor = c;
+                dot.title = `點擊使用常用色: ${c}`;
+                dot.onclick = () => selectHoneycombColor(c);
+                box.appendChild(dot);
+            });
+        }
+
+        // 將選取/自訂的顏色加入暫存
+        function addColorToRecent(color) {
+            if (!color) return;
+            const normCol = color.toLowerCase();
+            recentColors = recentColors.filter(c => c.toLowerCase() !== normCol);
+            recentColors.unshift(color);
+            if (recentColors.length > 10) recentColors.pop(); // 最多保留最新 10 個常用色
+            localStorage.setItem('eye_recent_colors', JSON.stringify(recentColors));
+        }
+
+        function openHoneycombPicker(btnEl) {
+            currentTargetColorInput = btnEl.previousElementSibling;
+            const modal = document.getElementById('honeycombModal');
+            const container = document.getElementById('honeycombContainer');
+            const customNative = document.getElementById('customNativeColor');
+            const customHex = document.getElementById('customHexInput');
+
+            const currentVal = currentTargetColorInput ? currentTargetColorInput.value : '#5c8a6b';
+            if (customNative) customNative.value = currentVal.startsWith('#') && currentVal.length === 7 ? currentVal : '#5c8a6b';
+            if (customHex) customHex.value = currentVal;
+
+            if (!container.innerHTML.trim()) {
+                let html = '';
+                HONEYCOMB_ROWS.forEach(row => {
+                    html += `<div class="honeycomb-row">`;
+                    row.forEach(color => {
+                        html += `<div class="hex-cell" style="background-color: ${color};" onclick="selectHoneycombColor('${color}')" title="${color}"></div>`;
+                    });
+                    html += `</div>`;
+                });
+                container.innerHTML = html;
+            }
+
+            renderRecentColors();
+            modal.style.display = 'flex';
+        }
+
+        function selectHoneycombColor(hexColor) {
+            if (currentTargetColorInput) {
+                currentTargetColorInput.value = hexColor;
+                const visualBtn = currentTargetColorInput.nextElementSibling;
+                if (visualBtn) {
+                    visualBtn.style.backgroundColor = hexColor;
+                    visualBtn.title = `點擊展開調色盤 (目前: ${hexColor})`;
+                }
+                addColorToRecent(hexColor);
+            }
+            closeHoneycombPicker();
+        }
+
+        function applyCustomColor() {
+            const customHex = document.getElementById('customHexInput').value.trim();
+            if (/^#([0-9A-F]{3}){1,2}$/i.test(customHex)) {
+                selectHoneycombColor(customHex);
+            } else {
+                alert("請輸入正確的 16 進位色碼格式 (例：#5c8a6b)！");
+            }
+        }
+
+        function closeHoneycombPicker() {
+            const modal = document.getElementById('honeycombModal');
+            if (modal) modal.style.display = 'none';
+            currentTargetColorInput = null;
         }
 
         function renderProductConfigTable() {
@@ -2751,6 +2941,10 @@
                 const badgeColor = conf.badgeColor || '#5c8a6b';
                 const odColor = conf.odColor || '#5c8a6b';
                 const osColor = conf.osColor || '#3b82f6';
+                
+                // ★ 新增兩個開關：採紀錄照模式(不壓OD/OS) 與 顯示長期備註
+                const isRecordPhoto = conf.isRecordPhoto !== undefined ? conf.isRecordPhoto : (cardType === 'glasses');
+                const showLongRemark = conf.showLongRemark !== undefined ? conf.showLongRemark : (cardType === 'glasses' || cardType === 'rgp');
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -2768,6 +2962,12 @@
                     <td>${renderColorPickerHtml('prod-row-badge-color', badgeColor)}</td>
                     <td>${renderColorPickerHtml('prod-row-od-color', odColor)}</td>
                     <td>${renderColorPickerHtml('prod-row-os-color', osColor)}</td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="prod-row-record-photo" ${isRecordPhoto ? 'checked' : ''} title="勾選：採紀錄照1/2排版，照片浮水印不壓OD/OS">
+                    </td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="prod-row-show-remark" ${showLongRemark ? 'checked' : ''} title="勾選：LIFF 小卡片下方顯示長期備註區塊">
+                    </td>
                     <td><button class="btn btn-danger" style="padding:1px 5px; font-size:11px;" onclick="removeProductConfigRow(${idx})">✕</button></td>
                 `;
                 tbody.appendChild(tr);
@@ -2817,6 +3017,8 @@
                 const badgeInp = tr.querySelector('.prod-row-badge-color');
                 const odInp = tr.querySelector('.prod-row-od-color');
                 const osInp = tr.querySelector('.prod-row-os-color');
+                const recordPhotoChk = tr.querySelector('.prod-row-record-photo');
+                const showRemarkChk = tr.querySelector('.prod-row-show-remark');
 
                 const pCode = codeInp ? codeInp.value.trim() : '';
                 if (pCode) {
@@ -2826,7 +3028,9 @@
                         cardType: typeSel ? typeSel.value : 'ok',
                         badgeColor: badgeInp ? badgeInp.value : '#5c8a6b',
                         odColor: odInp ? odInp.value : '#5c8a6b',
-                        osColor: osInp ? osInp.value : '#3b82f6'
+                        osColor: osInp ? osInp.value : '#3b82f6',
+                        isRecordPhoto: recordPhotoChk ? recordPhotoChk.checked : false,
+                        showLongRemark: showRemarkChk ? showRemarkChk.checked : false
                     };
                 }
             });
@@ -2843,7 +3047,7 @@
             updateDropdowns();
             buildProductFilterButtons();
             applyAllFilters();
-            alert("商品設定與自訂顏色已成功同步儲存至 Supabase 雲端！");
+            alert("商品設定、紀錄照模式與長期備註開關已成功同步儲存至 Supabase 雲端！");
         }
 
         async function syncSettingsToSupabase() {
@@ -3683,7 +3887,7 @@
 
             if (!confirm(`系統偵測到共【${changedClients.length}】筆客戶有修改，是否立即同步更新至雲端？`)) return;
             if (!supabaseClient) { alert("尚未連線到 Supabase！"); return; }
-            
+
             try {
                 // 3. 只打包有更動的資料，移除內部暫存欄位
                 const cleanData = changedClients.map(c => {
@@ -5452,16 +5656,22 @@
                 return;
             }
 
-            // 取得當天日期 (格式: 2026/08/29)
             const now = new Date();
             const y = now.getFullYear();
             const m = String(now.getMonth() + 1).padStart(2, '0');
             const d = String(now.getDate()).padStart(2, '0');
             const dateStr = `${y}/${m}/${d}`;
 
-            const eyeName = currentPhotoTarget.key === 'od_lens_photo' ? 'OD' : 'OS';
+            // 檢查該商品是否採紀錄照模式
+            const pCode = (client.product || '').trim();
+            const pConf = productConfigMap[pCode] || {};
+            const isRecordPhoto = pConf.isRecordPhoto;
 
-            // 姓名遮罩處理 (例如: 黃政中 -> 黃O中、林玄 -> 林O)
+            let eyeName = "";
+            if (!isRecordPhoto) {
+                eyeName = currentPhotoTarget.key === 'od_lens_photo' ? 'OD' : 'OS';
+            }
+
             let rawName = String(client.name || '').trim();
             let maskedName = rawName;
             if (rawName.length === 2) {
@@ -5477,35 +5687,43 @@
             };
 
             try {
-                // 壓縮並壓印浮水印
                 const base64Data = await compressImageToBase64(file, watermarkInfo, 600, 0.65);
 
+                // 記錄歷史並更新本地物件
                 recordEditHistory(client.code, currentPhotoTarget.key, client[currentPhotoTarget.key] || '');
                 client[currentPhotoTarget.key] = base64Data;
 
-                // 重新渲染表格
-                applyAllFilters();
+                // ★ 同步更新本地快照，防止 Realtime 覆蓋造成另一張照片消失
+                if (typeof originalClientsSnapshot !== 'undefined') {
+                    originalClientsSnapshot[client.code] = JSON.stringify(client);
+                }
 
-                // 儲存至 Supabase 雲端
-                await saveSingleFieldToCloud(client.code, currentPhotoTarget.key, base64Data);
-                alert(`鏡片照片上傳成功！\n已壓印浮水印：【${maskedName}  ${eyeName}  ${dateStr}】`);
+                applyAllFilters();
+                
+                // ★ 寫入雲端 (同時保護兩張照片欄位)
+                await savePhotoToCloud(client.code, client.od_lens_photo || '', client.os_lens_photo || '');
+                
+                const wmDesc = eyeName ? `${maskedName}  ${eyeName}  ${dateStr}` : `${maskedName}  ${dateStr}`;
+                alert(`照片上傳成功！\n已壓印浮水印：【${wmDesc}】`);
             } catch (err) {
                 console.error("照片處理失敗：", err);
                 alert("照片上傳壓縮失敗：" + err.message);
             }
         }
 
-        async function saveSingleFieldToCloud(code, fieldName, value) {
+        // ★ 強化版照片儲存：同時更新雙眼照片，避免單欄更新導致覆蓋
+        async function savePhotoToCloud(code, odPhoto, osPhoto) {
             if (!supabaseClient) return;
             try {
-                const updateObj = {};
-                updateObj[fieldName] = value;
                 await supabaseClient
                     .from('customers')
-                    .update(updateObj)
+                    .update({
+                        od_lens_photo: odPhoto,
+                        os_lens_photo: osPhoto
+                    })
                     .eq('code', code);
             } catch (err) {
-                console.error("雲端更新失敗：", err);
+                console.error("雲端更新照片失敗：", err);
             }
         }
         // 1. 刷新批次更換專用的舊商品下拉選單
@@ -5910,6 +6128,40 @@
             <div style="text-align:center; margin-top:10px;">
                 <button type="button" class="btn btn-secondary" style="padding:4px 16px; font-size:12px;"
                     onclick="closeLineAvatarZoomModal()">關閉檢視</button>
+            </div>
+        </div>
+    </div>
+    <!-- 蜂巢式六角形調色盤彈窗 (含常用暫存色 + 自定義選色區) -->
+    <div id="honeycombModal" onclick="closeHoneycombPicker()">
+        <div class="honeycomb-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:13px; font-weight:bold; color:#1e293b;">🎨 選擇標準配色</span>
+                <button type="button" onclick="closeHoneycombPicker()"
+                    style="border:none; background:none; font-size:18px; cursor:pointer; color:#64748b; line-height:1;">✕</button>
+            </div>
+
+            <!-- 蜂巢標準色輪 -->
+            <div class="honeycomb-wrapper" id="honeycombContainer"></div>
+
+            <!-- ★ 常用暫存色盤區 (點擊即可快速重複套用) -->
+            <div
+                style="margin-top:6px; padding-top:8px; border-top:1px dashed #cbd5e1; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11.5px; font-weight:bold; color:#475569; white-space:nowrap;">常用暫存：</span>
+                <div id="recentColorsBox" style="display:flex; gap:5px; flex-wrap:wrap; align-items:center;"></div>
+            </div>
+
+            <!-- 自定義選色區塊 -->
+            <div
+                style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span style="font-size:11.5px; font-weight:bold; color:#475569;">自訂色碼：</span>
+                <input type="color" id="customNativeColor"
+                    style="width:26px; height:24px; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer; padding:0; background:none;"
+                    onchange="document.getElementById('customHexInput').value=this.value">
+                <input type="text" id="customHexInput" class="form-control"
+                    style="width:80px; font-size:11.5px; text-align:center; padding:2px 4px;" placeholder="#5c8a6b"
+                    onkeydown="if(event.key==='Enter') applyCustomColor()">
+                <button type="button" class="btn btn-primary" style="padding:2px 8px; font-size:11px;"
+                    onclick="applyCustomColor()">套用</button>
             </div>
         </div>
     </div>
