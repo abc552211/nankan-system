@@ -2008,27 +2008,33 @@
                 </div>
             </div>
             <!-- 一鍵批次替換全客戶商品代碼工具 -->
-                    <div style="background: #fdfdfd; padding: 10px 12px; border: 1px dashed #94a3b8; border-radius: 6px; margin-top: 10px;">
-                        <div style="font-size: 12.5px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">
-                            🔄 一鍵批次替換全客戶商品代碼
-                        </div>
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <div style="display: flex; align-items: center; gap: 4px;">
-                                <span style="font-size: 12px; color: #475569;">原商品代碼：</span>
-                                <select id="batch_replace_old_prod" class="form-control" style="font-size: 12px; min-width: 140px; padding: 4px 6px;"></select>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 4px;">
-                                <span style="font-size: 12px; color: #475569;">更換為新名稱：</span>
-                                <input type="text" id="batch_replace_new_prod" class="form-control" placeholder="例：三代BF" style="font-size: 12px; width: 140px; padding: 4px 6px;">
-                            </div>
-                            <button class="btn btn-warning" style="padding: 4px 12px; font-size: 12px;" onclick="executeBatchReplaceProduct()">
-                                執行批次更換
-                            </button>
-                        </div>
-                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                            * 執行後將直接替換總表所有符合該舊代碼的客戶資料，並自動同步更新至 Supabase 雲端。
-                        </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 15px;">
+                    <div style="font-weight: bold; font-size: 13px; color: #1e293b; margin-bottom: 6px;">🔄 一鍵批次替換全客戶商品代碼</div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <select id="batch-replace-from-product" class="form-select" style="width: auto; min-width: 140px; font-size: 12px;"></select>
+                        <span style="font-size: 12px; color: #64748b;">更換為 ➔</span>
+                        <input type="text" id="batch-replace-to-product" class="form-input" placeholder="輸入新商品名稱" style="width: 160px; font-size: 12px;">
+                        <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="executeBatchProductReplace()">執行批次更換</button>
                     </div>
+                </div>
+
+                <!-- ✨ 外部 UID 快速批次配對工具 (姓名 + 電話比對，防重複追加) -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-weight: bold; font-size: 13px; color: #1e293b;">⚡ 外部 LINE UID 批次自動配對工具</div>
+                        <span style="font-size: 11px; color: #64748b;">自動以「姓名＋電話」比對客戶，UID 重複不寫入</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #475569; margin-bottom: 8px; line-height: 1.5;">
+                        支援由 Excel 直接複製 3 欄貼上（順序：<b>姓名、電話、LINE UID</b>），每行一筆。<br>
+                        例如：<code style="background: #e2e8f0; padding: 1px 4px; border-radius: 3px;">王小明	0912345678	U1234567890abcdef...</code>
+                    </div>
+                    <textarea id="batch-uid-import-input" class="form-input" style="width: 100%; height: 100px; font-family: monospace; font-size: 12px; line-height: 1.4; margin-bottom: 8px;" placeholder="王小明	0912345678	U1234567890abcdef...&#10;李大同	0987654321	Uabcdef1234567890..."></textarea>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span id="batch-uid-import-status" style="font-size: 12px; font-weight: bold; color: #2563eb;"></span>
+                        <button type="button" class="btn btn-primary" style="padding: 6px 16px; font-size: 12px; background: #0284c7;" onclick="executeBatchUidMatching()">開始自動比對並掛載 UID</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <!-- ==================== 頁籤 6：LINE 待綁定維護 ==================== -->
         <div id="tab-unbound" class="tab-content">
@@ -5072,6 +5078,123 @@
                     console.error("建立客戶並關聯失敗：", err);
                     alert("建立客戶並關聯失敗：" + err.message);
                 }
+            }
+        }
+        // =========================================================
+        // 外部 LINE UID 批次自動配對引擎 (姓名 + 電話雙重交叉核對、去重寫入)
+        // =========================================================
+        async function executeBatchUidMatching() {
+            const rawText = (document.getElementById('batch-uid-import-input').value || '').trim();
+            const statusEl = document.getElementById('batch-uid-import-status');
+
+            if (!rawText) {
+                alert('請先貼上欲配對的名冊文字（格式：姓名、電話、LINE UID）！');
+                return;
+            }
+
+            const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) return;
+
+            let matchedCount = 0;
+            let updatedClients = [];
+            let duplicateSkippedCount = 0;
+            let notFoundCount = 0;
+            let notFoundList = [];
+
+            // 建立快速查詢索引 (Key: cleanName_cleanPhone)
+            const cleanDigits = (s) => String(s || '').replace(/\D/g, '');
+            const clientMap = new Map();
+
+            rawClients.forEach(c => {
+                const cName = String(c.name || '').trim().toLowerCase();
+                const cPhone = cleanDigits(c.phone);
+                if (cName && cPhone) {
+                    const key = `${cName}_${cPhone}`;
+                    clientMap.set(key, c);
+                }
+            });
+
+            lines.forEach((line, idx) => {
+                // 支援 Tab (\t) 或 逗號 (,) 分隔
+                let tokens = line.includes('\t') ? line.split('\t') : line.split(',');
+                tokens = tokens.map(t => t.trim()).filter(Boolean);
+
+                if (tokens.length < 3) return;
+
+                const name = tokens[0].toLowerCase();
+                const phone = cleanDigits(tokens[1]);
+                const uid = tokens[2];
+
+                if (!name || !phone || !uid) return;
+
+                const lookupKey = `${name}_${phone}`;
+                const targetClient = clientMap.get(lookupKey);
+
+                if (targetClient) {
+                    let currentUids = Array.isArray(targetClient.line_uids) ? [...targetClient.line_uids] : [];
+                    
+                    // 防重複檢查：若陣列中已有此 UID 則跳過
+                    if (currentUids.includes(uid)) {
+                        duplicateSkippedCount++;
+                    } else {
+                        currentUids.push(uid);
+                        targetClient.line_uids = currentUids;
+                        updatedClients.push(targetClient);
+                        matchedCount++;
+                    }
+                } else {
+                    notFoundCount++;
+                    if (notFoundList.length < 5) {
+                        notFoundList.push(`${tokens[0]} (${tokens[1]})`);
+                    }
+                }
+            });
+
+            if (updatedClients.length === 0) {
+                if (duplicateSkippedCount > 0) {
+                    alert(`比對完成！\n所比對到的 ${duplicateSkippedCount} 筆資料皆已存在相同 UID，無須重複寫入。`);
+                } else {
+                    alert(`比對完成，但未找到任何相符的客戶（共 ${notFoundCount} 筆未命中）。\n請確認姓名與電話是否與資料庫一致。`);
+                }
+                return;
+            }
+
+            const confirmMsg = `比對結果分析：\n` +
+                `✅ 成功命中並待更新：${matchedCount} 筆\n` +
+                `⏭️ 重複 UID 已自動跳過：${duplicateSkippedCount} 筆\n` +
+                `❓ 查無客戶：${notFoundCount} 筆\n\n` +
+                `確定要立即將這 ${matchedCount} 筆 UID 同步寫入 Supabase 資料庫嗎？`;
+
+            if (!confirm(confirmMsg)) return;
+
+            if (statusEl) statusEl.innerText = `正在寫入 ${updatedClients.length} 筆客戶資料至雲端...`;
+
+            try {
+                // 採用 Promise.all 並行精準 update，避免觸發 NOT NULL 限制
+                const updatePromises = updatedClients.map(c => 
+                    supabaseClient
+                        .from('customers')
+                        .update({ line_uids: c.line_uids })
+                        .eq('code', c.code)
+                );
+
+                const results = await Promise.all(updatePromises);
+                
+                // 檢查是否有任何一筆失敗
+                const firstError = results.find(r => r.error);
+                if (firstError && firstError.error) {
+                    throw firstError.error;
+                }
+
+                if (statusEl) statusEl.innerText = `✅ 成功完成 ${matchedCount} 筆 UID 掛載！`;
+                document.getElementById('batch-uid-import-input').value = '';
+
+                renderTableWithPagination();
+                alert(`🎉 批次配對大功告成！\n已成功將 ${matchedCount} 筆客戶掛載新 UID 至雲端資料庫。`);
+            } catch (err) {
+                console.error('批次掛載 UID 失敗:', err);
+                if (statusEl) statusEl.innerText = `❌ 更新失敗: ${err.message}`;
+                alert('寫入雲端失敗: ' + (err.message || err));
             }
         }
 
