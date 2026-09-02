@@ -2221,18 +2221,8 @@
          ========================================================= -->
 
     <script>
-        // 1. Supabase 初始化 (使用 supabaseClient 避免名稱衝突)
-        const SUPABASE_URL = "https://wycoyydhcaeuabaelwdo.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5Y295eWRoY2FldWFiYWVsd2RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MDk2MDUsImV4cCI6MjEwMzQ4NTYwNX0.fkTge9-CHTIIYhQOfMpEmkRM9vOleM6rGd-h4sYDzjw";
-
-        var supabaseClient = null;
-        try {
-            if (window.supabase && typeof window.supabase.createClient === 'function') {
-                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            }
-        } catch (err) {
-            console.error("Supabase client init error:", err);
-        }
+        // ★ 安全防護：已將 Supabase 網址與金鑰移至 Cloudflare 後端，前端零曝光
+        const API_BASE_URL = "https://nakan-system-security.abc552211.workers.dev";
 
         // 系統資料狀態
         let rawClients = [];
@@ -2818,32 +2808,17 @@
         // =========================================================
         async function loadSettings() {
             try {
-                if (supabaseClient) {
-                    const { data, error } = await supabaseClient
-                        .from('system_settings')
-                        .select('data')
-                        .eq('id', 'global_config')
-                        .maybeSingle();
-
-                    if (!error && data && data.data) {
-                        const cfg = data.data;
-                        if (cfg.systemPassword) {
-                            systemCloudPassword = String(cfg.systemPassword);
-                        }
-                        if (cfg.doctors) {
-                            doctorPeriodConfig = cfg.doctors;
-                            doctorList = Object.keys(cfg.doctors);
-                        }
-                        if (cfg.products) {
-                            productList = cfg.products;
-                        }
-                        if (cfg.productConfigMap) {
-                            productConfigMap = cfg.productConfigMap;
-                        }
-                        if (cfg.templates) {
-                            customTemplates = cfg.templates;
-                        }
+                const res = await fetch(`${API_BASE_URL}/api/settings`);
+                if (res.ok) {
+                    const cfg = await res.json();
+                    if (cfg.systemPassword) systemCloudPassword = String(cfg.systemPassword);
+                    if (cfg.doctors) {
+                        doctorPeriodConfig = cfg.doctors;
+                        doctorList = Object.keys(cfg.doctors);
                     }
+                    if (cfg.products) productList = cfg.products;
+                    if (cfg.productConfigMap) productConfigMap = cfg.productConfigMap;
+                    if (cfg.templates) customTemplates = cfg.templates;
                 }
             } catch (err) {
                 console.warn("讀取雲端設定異常：", err);
@@ -3096,7 +3071,6 @@
         }
 
         async function syncSettingsToSupabase() {
-            if (!supabaseClient) return;
             try {
                 const payload = {
                     systemPassword: systemCloudPassword,
@@ -3105,11 +3079,12 @@
                     productConfigMap: productConfigMap,
                     templates: customTemplates
                 };
-                const { error } = await supabaseClient
-                    .from('system_settings')
-                    .upsert({ id: 'global_config', data: payload, updated_at: new Date().toISOString() });
-
-                if (error) throw error;
+                const res = await fetch(`${API_BASE_URL}/api/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("儲存設定失敗");
             } catch (err) {
                 console.error("同步設定至雲端失敗：", err);
             }
@@ -3191,29 +3166,77 @@
         // 系統通行密碼變數 (由 Supabase 雲端載入，程式內不留明文)
         let systemCloudPassword = "";
 
-        function checkGlobalAuth() {
+        async function checkGlobalAuth() {
             const saved = localStorage.getItem('eye_sys_auth_pass');
-            if (!systemCloudPassword || saved !== systemCloudPassword) {
-                const overlay = document.getElementById('authOverlay');
-                if (overlay) {
-                    overlay.style.display = 'flex';
-                    const inp = document.getElementById('sitePasswordInput');
-                    if (inp) inp.focus();
-                }
-            } else {
-                const overlay = document.getElementById('authOverlay');
-                if (overlay) overlay.style.display = 'none';
+            const overlay = document.getElementById('authOverlay');
+
+            // 若本機已有記錄，先向後端快速驗證
+            if (saved) {
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/verify-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: saved })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        if (overlay) overlay.style.display = 'none';
+                        return;
+                    }
+                } catch (e) {}
+            }
+
+            // 尚未驗證或密碼不符，跳出視窗
+            if (overlay) {
+                overlay.style.display = 'flex';
+                const inp = document.getElementById('sitePasswordInput');
+                if (inp) inp.focus();
             }
         }
 
-        function verifySitePassword() {
-            const val = document.getElementById('sitePasswordInput').value.trim();
+        async function verifySitePassword() {
+            const inputEl = document.getElementById('sitePasswordInput');
+            const val = inputEl ? inputEl.value.trim() : '';
             const errMsg = document.getElementById('authErrMsg');
-            if (systemCloudPassword && val === systemCloudPassword) {
-                localStorage.setItem('eye_sys_auth_pass', val);
-                document.getElementById('authOverlay').style.display = 'none';
-            } else {
-                if (errMsg) errMsg.style.display = 'block';
+            if (!val) return;
+
+            if (errMsg) {
+                errMsg.style.display = 'block';
+                errMsg.style.color = '#3b82f6';
+                errMsg.innerText = '驗證連線中，請稍候...';
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/verify-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: val })
+                });
+
+                if (!res.ok) {
+                    throw new Error(`伺服器回應異常 (${res.status})`);
+                }
+
+                const result = await res.json();
+
+                if (result && result.success) {
+                    localStorage.setItem('eye_sys_auth_pass', val);
+                    document.getElementById('authOverlay').style.display = 'none';
+                    if (errMsg) errMsg.style.display = 'none';
+                } else {
+                    if (errMsg) {
+                        errMsg.style.display = 'block';
+                        errMsg.style.color = '#ef4444';
+                        errMsg.innerText = '密碼錯誤，請重新輸入！';
+                    }
+                }
+            } catch (err) {
+                console.error("驗證失敗詳細原因:", err);
+                if (errMsg) {
+                    errMsg.style.display = 'block';
+                    errMsg.style.color = '#ef4444';
+                    errMsg.innerText = '連線失敗：' + (err.message || err);
+                }
             }
         }
 
@@ -3884,14 +3907,11 @@
                 await loadSettings();
                 checkGlobalAuth();
 
-                if (supabaseClient) {
-                    // ★ 解除 1000 筆上限：明確指定抓取 0 到 4999 筆全量資料
-                    const { data, error } = await supabaseClient
-                        .from('customers')
-                        .select('*')
-                        .range(0, 4999);
-
-                    if (!error && data && data.length > 0) {
+                // ★ 透過後端 Worker 代理撈取資料，保護連線指令與金鑰
+                const custRes = await fetch(`${API_BASE_URL}/api/customers`);
+                if (custRes.ok) {
+                    const data = await custRes.json();
+                    if (data && data.length > 0) {
                         data.forEach(item => {
                             item.birthday = formatExcelDate(item.birthday, true);
                             item.lastVisit = formatExcelDate(item.lastVisit, false);
@@ -3996,7 +4016,6 @@
             }
 
             if (!confirm(`系統偵測到共【${changedClients.length}】筆客戶有修改，是否立即同步更新至雲端？`)) return;
-            if (!supabaseClient) { alert("尚未連線到 Supabase！"); return; }
 
             try {
                 // 3. 只打包有更動的資料，移除內部暫存欄位
@@ -4007,12 +4026,14 @@
                     return obj;
                 });
 
-                // 4. 只將這幾筆精確 upsert 送到 Supabase
-                const { error } = await supabaseClient
-                    .from('customers')
-                    .upsert(cleanData, { onConflict: 'code' });
+                // 4. 透過 Cloudflare Worker 代理安全寫入
+                const res = await fetch(`${API_BASE_URL}/api/customers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cleanData)
+                });
 
-                if (error) throw error;
+                if (!res.ok) throw new Error("寫入雲端失敗");
 
                 // 5. 儲存成功後，重新刷新快照並重設修改旗標
                 createDataSnapshot(rawClients);
