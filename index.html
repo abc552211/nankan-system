@@ -2350,16 +2350,50 @@
             });
         }
 
-        // 找出真正有被更動的客戶清單
+        // 找出真正有被更動的客戶清單 (排除自動計算的動態天數欄位)
         function getChangedClients() {
             const changed = [];
+
+            // 輔助函式：只提取實體手動輸入的業務欄位進行純淨比對
+            const getCoreFields = (c) => {
+                if (!c) return "";
+                return JSON.stringify({
+                    name: c.name || '',
+                    birthday: c.birthday || '',
+                    phone: c.phone || '',
+                    lastVisit: c.lastVisit || '',
+                    odChangeDate: c.odChangeDate || '',
+                    osChangeDate: c.osChangeDate || '',
+                    product: c.product || '',
+                    alCheckDate: c.alCheckDate || '',
+                    alOD: c.alOD || '',
+                    alOS: c.alOS || '',
+                    firstPickup: c.firstPickup || '',
+                    serviceDate: c.serviceDate || '',
+                    fdModify: c.fdModify || '',
+                    contactDate: c.contactDate || '',
+                    longRemark: c.longRemark || '',
+                    idNumber: c.idNumber || '',
+                    od_lens_photo: c.od_lens_photo || '',
+                    os_lens_photo: c.os_lens_photo || '',
+                    line_uids: c.line_uids || []
+                });
+            };
+
             rawClients.forEach(client => {
                 const snapStr = originalClientsSnapshot[client.code];
-                // 若找不到快照 (代表是新客戶) 或 資料字串不同 (代表有修改)
-                if (!snapStr || JSON.stringify(client) !== snapStr) {
+                if (!snapStr) {
+                    // 全新客戶
                     changed.push(client);
+                } else {
+                    const snapObj = JSON.parse(snapStr);
+                    // ★ 核心：比對核心業務欄位，動態天數差 1 天不視為人為修改
+                    if (getCoreFields(client) !== getCoreFields(snapObj)) {
+                        changed.push(client);
+                    }
                 }
             });
+
             return changed;
         }
 
@@ -2455,66 +2489,77 @@
             return `<div style="font-weight:bold;">${cleanText}</div>`;
         }
 
-        function formatExcelDate(rawVal, isBirthday = false) {
+        // ==========================================
+        // 嚴格日期格式化與防呆驗證引擎 (防 13 月、32 號等髒資料)
+        // ==========================================
+        function formatExcelDate(rawVal, isBirthday = false, showAlert = false) {
             if (rawVal === undefined || rawVal === null || String(rawVal).trim() === "") return "";
             let str = String(rawVal).trim();
 
             if (str === "停用" || str === "無資料" || str === "尚未看診" || str === "✓") return str;
 
             const currentFullYear = new Date().getFullYear();
+            let y, m, d;
 
+            // 1. 處理 Excel 序號 (如 45556)
             if (/^\d{5}$/.test(str)) {
                 const serial = parseInt(str, 10);
                 const utc_days = Math.floor(serial - 25569);
                 const utc_value = utc_days * 86400;
                 const dateInfo = new Date(utc_value * 1000);
 
-                const y = dateInfo.getUTCFullYear();
-                const m = String(dateInfo.getUTCMonth() + 1).padStart(2, '0');
-                const d = String(dateInfo.getUTCDate()).padStart(2, '0');
-
-                if (isBirthday) {
-                    const twY = y - 1911;
-                    return `${twY}/${m}/${d}`;
-                } else {
-                    return `${y}/${m}/${d}`;
-                }
+                y = dateInfo.getUTCFullYear();
+                m = dateInfo.getUTCMonth() + 1;
+                d = dateInfo.getUTCDate();
             }
-
-            if (/^\d{1,2}[\/\-]\d{1,2}$/.test(str)) {
+            // 2. 處理 月/日 簡寫 (如 8/29、13/26)
+            else if (/^\d{1,2}[\/\-]\d{1,2}$/.test(str)) {
                 const parts = str.replace(/-/g, '/').split('/');
-                const m = String(parseInt(parts[0], 10)).padStart(2, '0');
-                const d = String(parseInt(parts[1], 10)).padStart(2, '0');
-                if (isBirthday) {
-                    return `115/${m}/${d}`;
-                } else {
-                    return `${currentFullYear}/${m}/${d}`;
-                }
+                m = parseInt(parts[0], 10);
+                d = parseInt(parts[1], 10);
+                y = isBirthday ? 115 : currentFullYear; // 生日預設民國，其餘預設今年
             }
-
-            if (str.includes('/') || str.includes('-')) {
+            // 3. 處理完整日期 (如 2024/09/21 或 103/03/26)
+            else if (str.includes('/') || str.includes('-')) {
                 const parts = str.replace(/-/g, '/').split('/');
                 if (parts.length >= 2) {
                     let p0 = parseInt(parts[0], 10);
-                    let m = String(parseInt(parts[1], 10) || 1).padStart(2, '0');
-                    let d = parts.length >= 3 ? String(parseInt(parts[2], 10) || 1).padStart(2, '0') : "01";
+                    m = parseInt(parts[1], 10) || 1;
+                    d = parts.length >= 3 ? parseInt(parts[2], 10) || 1 : 1;
 
                     if (isBirthday) {
-                        if (p0 > 1900) p0 = p0 - 1911;
-                        return `${p0}/${m}/${d}`;
+                        y = p0 > 1900 ? p0 - 1911 : p0;
                     } else {
-                        if (p0 >= 1900) {
-                            return `${p0}/${m}/${d}`;
-                        } else if (p0 > 100) {
-                            return `${p0 + 1911}/${m}/${d}`;
-                        } else {
-                            return `${2000 + p0}/${m}/${d}`;
-                        }
+                        if (p0 >= 1900) y = p0;
+                        else if (p0 > 100) y = p0 + 1911;
+                        else y = 2000 + p0;
                     }
                 }
+            } else {
+                return str;
             }
 
-            return str;
+            // ★ 核心合法性驗證 (防呆關鍵)
+            const checkYear = isBirthday ? y + 1911 : y;
+            const testDate = new Date(checkYear, m - 1, d);
+            const isValid = (
+                testDate.getFullYear() === checkYear &&
+                testDate.getMonth() === m - 1 &&
+                testDate.getDate() === d &&
+                m >= 1 && m <= 12
+            );
+
+            if (!isValid) {
+                if (showAlert) {
+                    alert(`⚠️ 輸入的日期【${str}】不合法（月份需介於 1-12，且天數需符合該月份）！`);
+                }
+                console.warn(`攔截到非法日期：${str}`);
+                return ""; // 判定非法，直接清空防呆
+            }
+
+            const mm = String(m).padStart(2, '0');
+            const dd = String(d).padStart(2, '0');
+            return `${y}/${mm}/${dd}`;
         }
 
         function generateDateOptions() {
@@ -3704,10 +3749,12 @@
             function finishEdit() {
                 let newVal = input.value.trim();
                 const dateFields = ['lastVisit', 'odChangeDate', 'osChangeDate', 'alCheckDate', 'firstPickup', 'serviceDate', 'contactDate'];
+                
+                // ★ 傳入 true 啟用錯誤提示彈窗
                 if (dateFields.includes(key)) {
-                    newVal = formatExcelDate(newVal, false);
+                    newVal = formatExcelDate(newVal, false, true);
                 } else if (key === 'birthday') {
-                    newVal = formatExcelDate(newVal, true);
+                    newVal = formatExcelDate(newVal, true, true);
                 }
 
                 if (newVal !== originalVal) {
@@ -3759,6 +3806,65 @@
                 applyAllFilters();
             }
         }
+        // ==========================================
+        // 閒置無感資料庫同步引擎 (在無未儲存修改時自動校正)
+        // ==========================================
+        let silentSyncTimer = null;
+
+        function startAutoSilentSync() {
+            if (silentSyncTimer) clearInterval(silentSyncTimer);
+            
+            // 每 10 分鐘 (600,000 毫秒) 執行一次
+            silentSyncTimer = setInterval(async () => {
+                // 1. 若人員正在編輯或有尚未儲存的修改，絕對不重拉資料
+                if (hasUnsavedChanges) {
+                    console.log("偵測到有人員未儲存修改，略過背景同步。");
+                    return;
+                }
+
+                // 2. 靜態自 Supabase 讀取最新客戶狀態 (同樣解除 1000 筆限制)
+                if (!supabaseClient) return;
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('customers')
+                        .select('*')
+                        .range(0, 4999);
+
+                    if (!error && data && data.length > 0) {
+                        data.forEach(item => {
+                            item.birthday = formatExcelDate(item.birthday, true);
+                            item.lastVisit = formatExcelDate(item.lastVisit, false);
+                            item.alCheckDate = formatExcelDate(item.alCheckDate, false);
+                            item.odChangeDate = formatExcelDate(item.odChangeDate, false);
+                            item.osChangeDate = formatExcelDate(item.osChangeDate, false);
+                            item.firstPickup = formatExcelDate(item.firstPickup, false);
+                            item.serviceDate = formatExcelDate(item.serviceDate, false);
+                            item.contactDate = formatExcelDate(item.contactDate, false);
+                            item.od_lens_photo = item.od_lens_photo || '';
+                            item.os_lens_photo = item.os_lens_photo || '';
+                            if (!item.line_uids) {
+                                item.line_uids = [];
+                            } else if (typeof item.line_uids === 'string') {
+                                item.line_uids = item.line_uids.replace(/[\{\}\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+                            }
+                            calculateDynamicFields(item);
+                        });
+
+                        rawClients = data;
+                        // 重新對齊快照，確保比對基準永遠是最新狀態
+                        if (typeof createDataSnapshot === 'function') {
+                            createDataSnapshot(rawClients);
+                        }
+                        
+                        // 平滑刷新表格，不跳頁、不白屏
+                        applyAllFilters();
+                        console.log("✅ 系統已於背景完成與雲端資料庫最新對齊。");
+                    }
+                } catch (err) {
+                    console.warn("背景同步暫時失敗：", err);
+                }
+            }, 10 * 60 * 1000); 
+        }
 
         // =========================================================
         // Supabase 資料操作：讀取、儲存、新增、Excel匯入
@@ -3779,10 +3885,11 @@
                 checkGlobalAuth();
 
                 if (supabaseClient) {
-                    // 1. 初次讀取所有客戶資料
+                    // ★ 解除 1000 筆上限：明確指定抓取 0 到 4999 筆全量資料
                     const { data, error } = await supabaseClient
                         .from('customers')
-                        .select('*');
+                        .select('*')
+                        .range(0, 4999);
 
                     if (!error && data && data.length > 0) {
                         data.forEach(item => {
@@ -3871,7 +3978,10 @@
             if (typeof loadUnboundRequests === 'function') {
                 loadUnboundRequests();
             }
+            // 在 initApp() 最後一行加入：啟動定時無感同步 (每 10 分鐘檢查一次)
+            startAutoSilentSync();
         }
+    
 
         async function saveAllChanges() {
             // 1. 精準比對出真正有更動的客戶清單
