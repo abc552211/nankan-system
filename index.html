@@ -3939,8 +3939,7 @@
 
                     // 2. 建立 Realtime 即時推播監聽 (家長一綁定，後台自動秒級同步，免按 F5)
                     supabaseClient
-                        .channel('realtime_customers_channel')
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
+                        
                             trackRealtimeMessage(1);
                             if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
                                 const updatedRow = payload.new;
@@ -3973,19 +3972,11 @@
 
                                 applyAllFilters(); // 自動刷新畫面
                             }
-                        })
-                        .subscribe();
-
-                    // 3. 即時監聽未成功綁定請求表 (新申請即時跳出徽章提示)
-                    supabaseClient
-                        .channel('realtime_unbound_channel')
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'unbound_requests' }, () => {
                             trackRealtimeMessage(1);
                             if (typeof loadUnboundRequests === 'function') {
                                 loadUnboundRequests();
                             }
-                        })
-                        .subscribe();
+                        
                 }
             } catch (err) {
                 console.warn("Supabase 讀取異常：", err);
@@ -5246,15 +5237,11 @@
         let unboundList = [];
 
         async function loadUnboundRequests() {
-            if (!supabaseClient) return;
             try {
-                const { data, error } = await supabaseClient
-                    .from('unbound_requests')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (!error && data) {
-                    unboundList = data;
+                const res = await fetch(`${API_BASE_URL}/api/unbound-requests`);
+                if (res.ok) {
+                    const data = await res.json();
+                    unboundList = Array.isArray(data) ? data : [];
                     renderUnboundTable();
                 }
             } catch (err) {
@@ -5842,19 +5829,21 @@
             }
         }
 
-        // ★ 強化版照片儲存：同時更新雙眼照片，避免單欄更新導致覆蓋
+        // ★ 強化版照片儲存：由 Worker 安全代理更新照片，不再依賴 supabaseClient
         async function savePhotoToCloud(code, odPhoto, osPhoto) {
-            if (!supabaseClient) return;
             try {
-                await supabaseClient
-                    .from('customers')
-                    .update({
+                const res = await fetch(`${API_BASE_URL}/api/customer/${encodeURIComponent(code)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
                         od_lens_photo: odPhoto,
                         os_lens_photo: osPhoto
                     })
-                    .eq('code', code);
+                });
+                if (!res.ok) throw new Error("後端更新照片失敗");
             } catch (err) {
                 console.error("雲端更新照片失敗：", err);
+                throw err;
             }
         }
         // 1. 刷新批次更換專用的舊商品下拉選單
@@ -5976,49 +5965,20 @@
         }
 
         async function fetchLineProfiles(uids, client) {
-            // 查詢 line_profiles 表取得最新暱稱、頭貼與開啟時間
-            if (uids.length > 0 && supabaseClient) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('line_profiles')
-                        .select('uid, display_name, picture_url, updated_at')
-                        .in('uid', uids);
+            if (!uids || uids.length === 0) return;
 
-                    if (!error && data) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/line-profiles?uids=${encodeURIComponent(uids.join(','))}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
                         data.forEach(p => {
                             lineProfileCache[p.uid] = p;
                         });
                     }
-                } catch (e) {
-                    console.warn("讀取 line_profiles 異常:", e);
                 }
-            }
-
-            // 若尚無 line_profiles 資料，從 unbound_requests 反向查詢備用
-            const missingUids = uids.filter(uid => !lineProfileCache[uid] || !lineProfileCache[uid].picture_url);
-            if (missingUids.length > 0 && supabaseClient) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('unbound_requests')
-                        .select('uid, liff_name, liff_pic, created_at')
-                        .in('uid', missingUids)
-                        .order('created_at', { ascending: false });
-
-                    if (!error && data) {
-                        data.forEach(r => {
-                            if (!lineProfileCache[r.uid]) {
-                                lineProfileCache[r.uid] = {
-                                    uid: r.uid,
-                                    display_name: r.liff_name || 'LINE 用戶',
-                                    picture_url: r.liff_pic || '',
-                                    updated_at: r.created_at || ''
-                                };
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn("比對待處理紀錄頭像失敗:", e);
-                }
+            } catch (e) {
+                console.warn("讀取 line_profiles 異常:", e);
             }
         }
 
