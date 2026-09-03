@@ -4151,7 +4151,7 @@
                         fdModify: getColIdx(["方鼎修改", "方鼎"]),
                         longRemark: getColIdx(["長期註記", "備註"]),
                         idNumber: getColIdx(["ID", "身分證", "身分證字號"]),
-                        lineUids: getColIdx(["LINE UID", "LINE_UID", "LINE", "UID"]) // 自動辨識 UID 欄位
+                        lineUids: getColIdx(["LINE UID", "LINE_UID", "LINE", "UID"])
                     };
 
                     const loaded = [];
@@ -4173,7 +4173,6 @@
                         const overdueVal = getVal(idxMap.overdueDays);
                         const isStop = fdVal === '停用' || overdueVal === '停用';
 
-                        // 處理 LINE UID 轉為陣列 (支援逗號分隔)
                         const rawUidStr = getVal(idxMap.lineUids);
                         let parsedUids = [];
                         if (rawUidStr) {
@@ -4203,30 +4202,32 @@
                             contactDate: formatExcelDate(getVal(idxMap.contactDate), false),
                             longRemark: getVal(idxMap.longRemark),
                             idNumber: getVal(idxMap.idNumber),
-                            line_uids: parsedUids // 寫入陣列
+                            line_uids: parsedUids
                         };
 
                         calculateDynamicFields(obj);
                         loaded.push(obj);
                     }
 
-                    if (!confirm(`共解析出 ${loaded.length} 筆客戶資料，是否同步寫入 Supabase？`)) return;
+                    if (!confirm(`共解析出 ${loaded.length} 筆客戶資料，是否同步寫入雲端資料庫？`)) return;
 
-                    if (supabaseClient) {
-                        const chunkSize = 500;
-                        for (let i = 0; i < loaded.length; i += chunkSize) {
-                            const chunk = loaded.slice(i, i + chunkSize);
-                            const { error } = await supabaseClient
-                                .from('customers')
-                                .upsert(chunk, { onConflict: 'code' });
-                            if (error) throw error;
-                        }
+                    // ★ 改由 Cloudflare Worker 後端代理批次寫入 (分批每批 200 筆)
+                    const chunkSize = 200;
+                    for (let i = 0; i < loaded.length; i += chunkSize) {
+                        const chunk = loaded.slice(i, i + chunkSize);
+                        const res = await fetch(`${API_BASE_URL}/api/customers`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(chunk)
+                        });
+                        if (!res.ok) throw new Error(`第 ${i + 1} 至 ${Math.min(i + chunkSize, loaded.length)} 筆上傳失敗`);
                     }
 
                     rawClients = loaded;
+                    createDataSnapshot(rawClients);
                     buildProductFilterButtons();
                     applyAllFilters();
-                    alert(`🎉 成功匯入並同步 ${loaded.length} 筆客戶資料（含 LINE UID 綁定資訊）！`);
+                    alert(`🎉 成功匯入並同步 ${loaded.length} 筆客戶資料至雲端！`);
                     switchTab('tab-main', document.querySelector('.tab-btn'));
                 } catch (err) {
                     console.error("匯入失敗詳細原因：", err);
@@ -5231,21 +5232,29 @@
             currentPage = 1;
             renderTableWithPagination();
         }
-        // ==========================================
-        // LINE 待綁定維護邏輯
-        // ==========================================
+        // =========================================================
+        // LINE 待綁定維護邏輯 (安全 Worker 後端代理版)
+        // =========================================================
         let unboundList = [];
 
         async function loadUnboundRequests() {
+            const tbody = document.getElementById('unboundTableBody');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #3b82f6;">正在讀取待綁定資料中...</td></tr>`;
+
             try {
                 const res = await fetch(`${API_BASE_URL}/api/unbound-requests`);
                 if (res.ok) {
                     const data = await res.json();
                     unboundList = Array.isArray(data) ? data : [];
                     renderUnboundTable();
+                } else {
+                    throw new Error(`伺服器回應錯誤 (${res.status})`);
                 }
             } catch (err) {
                 console.error("讀取待綁定清單失敗：", err);
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #ef4444;">讀取失敗：${err.message || err}</td></tr>`;
+                }
             }
         }
 
@@ -5276,10 +5285,9 @@
 
                 const timeStr = req.created_at ? new Date(req.created_at).toLocaleString('zh-TW', { hour12: false }) : '-';
                 const statusBadge = req.status === 'resolved'
-                    ? `<span style="color:#16a34a; font-weight:bold;">已手動關聯 (${req.matched_code})</span>`
+                    ? `<span style="color:#16a34a; font-weight:bold;">已手動關聯 (${req.matched_code || ''})</span>`
                     : (req.status === 'ignored' ? `<span style="color:#94a3b8;">已忽略</span>` : `<span style="color:#ef4444; font-weight:bold;">待處理</span>`);
 
-                // 家長大頭照渲染 (若無頭像則顯示預設綠底頭像)
                 const avatarHtml = req.liff_pic
                     ? `<img src="${req.liff_pic}" style="width:28px; height:28px; border-radius:50%; vertical-align:middle; margin-right:6px; object-fit:cover; border:1px solid #cbd5e1;">`
                     : `<span style="display:inline-block; width:28px; height:28px; border-radius:50%; background:#e2e8f0; color:#64748b; text-align:center; line-height:28px; font-size:12px; vertical-align:middle; margin-right:6px;">👤</span>`;
@@ -5287,7 +5295,7 @@
                 let actionBtns = '';
                 if (req.status === 'pending') {
                     actionBtns = `
-                        <button class="btn btn-success" style="padding:2px 8px; font-size:11px;" onclick="manualBindPrompt(${req.id}, '${req.uid}', '${req.name}')">手動關聯</button>
+                        <button class="btn btn-success" style="padding:2px 8px; font-size:11px;" onclick="manualBindPrompt(${req.id}, '${req.uid}', '${req.name || ''}')">手動關聯</button>
                         <button class="btn btn-secondary" style="padding:2px 6px; font-size:11px;" onclick="ignoreUnboundRequest(${req.id})">忽略</button>
                     `;
                 } else if (req.status === 'ignored') {
@@ -5390,7 +5398,6 @@
             if (!currentBindReq) return;
 
             const codeInput = document.getElementById('bind_modal_code_input');
-            const isAutoC = document.getElementById('bind_modal_auto_c_chk').checked;
             const targetCode = codeInput.value.trim().toUpperCase();
 
             if (!targetCode) {
@@ -5412,17 +5419,24 @@
                     if (!currentUids.includes(uid)) currentUids.push(uid);
                     client.line_uids = currentUids;
 
-                    if (supabaseClient) {
-                        await supabaseClient
-                            .from('customers')
-                            .update({ line_uids: currentUids })
-                            .eq('code', client.code);
+                    // 透過 Worker 更新客戶資料
+                    const cleanObj = { ...client };
+                    delete cleanObj.docId;
+                    delete cleanObj.created_at;
 
-                        await supabaseClient
-                            .from('unbound_requests')
-                            .update({ status: 'resolved', matched_code: client.code })
-                            .eq('id', reqId);
-                    }
+                    const resCust = await fetch(`${API_BASE_URL}/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify([cleanObj])
+                    });
+                    if (!resCust.ok) throw new Error("更新客戶 UID 失敗");
+
+                    // 透過 Worker 更新待綁定狀態為 resolved
+                    await fetch(`${API_BASE_URL}/api/unbound-requests/${reqId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'resolved', matched_code: client.code })
+                    });
 
                     alert(`🎉 綁定成功！客戶【${client.name}】已成功關聯此 LINE 帳號。`);
                     closeManualBindModal();
@@ -5433,7 +5447,7 @@
                     alert("手動綁定失敗：" + err.message);
                 }
             } else {
-                // 2. 查無編號（包含非兒控自動給號）：直接於總表建立新客戶並綁定
+                // 2. 查無編號（新客戶）
                 if (!confirm(`系統中尚無編號【${targetCode}】。\n是否自動以編號【${targetCode}】建立【${currentBindReq.name}】之客戶資料並直接完成 LINE 綁定？`)) return;
 
                 const newObj = {
@@ -5464,18 +5478,18 @@
                 calculateDynamicFields(newObj);
 
                 try {
-                    if (supabaseClient) {
-                        const { error } = await supabaseClient
-                            .from('customers')
-                            .insert([newObj]);
+                    const resCust = await fetch(`${API_BASE_URL}/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify([newObj])
+                    });
+                    if (!resCust.ok) throw new Error("建立新客戶失敗");
 
-                        if (error) throw error;
-
-                        await supabaseClient
-                            .from('unbound_requests')
-                            .update({ status: 'resolved', matched_code: targetCode })
-                            .eq('id', reqId);
-                    }
+                    await fetch(`${API_BASE_URL}/api/unbound-requests/${reqId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'resolved', matched_code: targetCode })
+                    });
 
                     rawClients.unshift(newObj);
                     alert(`🎉 成功以【${targetCode}】新增客戶【${newObj.name}】至總表並完成 LINE 綁定！`);
@@ -5488,15 +5502,64 @@
                 }
             }
         }
+
+        async function ignoreUnboundRequest(reqId) {
+            if (!confirm("確定要忽略此筆請求嗎？")) return;
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/unbound-requests/${reqId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'ignored' })
+                });
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${errorText}`);
+                }
+                
+                await loadUnboundRequests();
+            } catch (err) {
+                console.error("忽略操作失敗詳細原因：", err);
+                alert("操作失敗：" + err.message);
+            }
+        }
+
+        async function restoreUnboundRequest(reqId) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/unbound-requests/${reqId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'pending' })
+                });
+                if (!res.ok) throw new Error("復原狀態失敗");
+                await loadUnboundRequests();
+            } catch (err) {
+                alert("復原失敗：" + err.message);
+            }
+        }
+
+        async function deleteUnboundRequest(reqId) {
+            if (!confirm("確定要刪除此筆歷史紀錄嗎？")) return;
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/unbound-requests/${reqId}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) throw new Error("刪除紀錄失敗");
+                await loadUnboundRequests();
+            } catch (err) {
+                alert("刪除失敗：" + err.message);
+            }
+        }
+       
         // =========================================================
-        // 外部 LINE UID 批次自動配對引擎 (姓名 + 電話雙重交叉核對、去重寫入)
+        // 外部 LINE UID 彈性配對與待綁定轉移引擎 (除錯強化版)
         // =========================================================
         async function executeBatchUidMatching() {
             const rawText = (document.getElementById('batch-uid-import-input').value || '').trim();
             const statusEl = document.getElementById('batch-uid-import-status');
 
             if (!rawText) {
-                alert('請先貼上欲配對的名冊文字（格式：姓名、電話、LINE UID）！');
+                alert('請先貼上欲配對的名冊文字！');
                 return;
             }
 
@@ -5504,12 +5567,10 @@
             if (lines.length === 0) return;
 
             let matchedCount = 0;
-            let updatedClients = [];
             let duplicateSkippedCount = 0;
-            let notFoundCount = 0;
-            let notFoundList = [];
+            let toUnboundList = [];
+            const updatedClientsMap = new Map();
 
-            // 建立快速查詢索引 (Key: cleanName_cleanPhone)
             const cleanDigits = (s) => String(s || '').replace(/\D/g, '');
             const clientMap = new Map();
 
@@ -5517,134 +5578,121 @@
                 const cName = String(c.name || '').trim().toLowerCase();
                 const cPhone = cleanDigits(c.phone);
                 if (cName && cPhone) {
-                    const key = `${cName}_${cPhone}`;
-                    clientMap.set(key, c);
+                    clientMap.set(`${cName}_${cPhone}`, c);
                 }
             });
 
-            lines.forEach((line, idx) => {
-                // 支援 Tab (\t) 或 逗號 (,) 分隔
-                let tokens = line.includes('\t') ? line.split('\t') : line.split(',');
-                tokens = tokens.map(t => t.trim()).filter(Boolean);
+            lines.forEach((line) => {
+                let tokens = line.split(/[\t, \s]+/).map(t => t.trim()).filter(Boolean);
+                if (tokens.length === 0) return;
 
-                if (tokens.length < 3) return;
+                let uid = "";
+                let phone = "";
+                let name = "";
 
-                const name = tokens[0].toLowerCase();
-                const phone = cleanDigits(tokens[1]);
-                const uid = tokens[2];
+                tokens.forEach(token => {
+                    if (/^U[0-9a-fA-F]{32}$/.test(token) || (token.startsWith('U') && token.length >= 30)) {
+                        uid = token;
+                    } else if (/^09\d{8}$/.test(cleanDigits(token))) {
+                        phone = cleanDigits(token);
+                    } else if (!name) {
+                        name = token;
+                    }
+                });
 
-                if (!name || !phone || !uid) return;
+                if (!uid) return;
 
-                const lookupKey = `${name}_${phone}`;
-                const targetClient = clientMap.get(lookupKey);
+                const lookupKey = (name && phone) ? `${name.toLowerCase()}_${phone}` : "";
+                const targetClient = lookupKey ? clientMap.get(lookupKey) : null;
 
                 if (targetClient) {
                     let currentUids = Array.isArray(targetClient.line_uids) ? [...targetClient.line_uids] : [];
-
-                    // 防重複檢查：若陣列中已有此 UID 則跳過
                     if (currentUids.includes(uid)) {
                         duplicateSkippedCount++;
                     } else {
                         currentUids.push(uid);
                         targetClient.line_uids = currentUids;
-                        updatedClients.push(targetClient);
+                        updatedClientsMap.set(targetClient.code, targetClient);
                         matchedCount++;
                     }
                 } else {
-                    notFoundCount++;
-                    if (notFoundList.length < 5) {
-                        notFoundList.push(`${tokens[0]} (${tokens[1]})`);
-                    }
+                    toUnboundList.push({
+                        uid: uid,
+                        name: name || "未知(外部匯入)",
+                        phone: phone || "",
+                        birthday: "",
+                        status: "pending",
+                        created_at: new Date().toISOString()
+                    });
                 }
             });
 
-            if (updatedClients.length === 0) {
+            const updatedClients = Array.from(updatedClientsMap.values());
+
+            if (updatedClients.length === 0 && toUnboundList.length === 0) {
                 if (duplicateSkippedCount > 0) {
-                    alert(`比對完成！\n所比對到的 ${duplicateSkippedCount} 筆資料皆已存在相同 UID，無須重複寫入。`);
+                    alert(`比對完成！所有解析到的 UID 皆已綁定過，無須重複寫入。`);
                 } else {
-                    alert(`比對完成，但未找到任何相符的客戶（共 ${notFoundCount} 筆未命中）。\n請確認姓名與電話是否與資料庫一致。`);
+                    alert(`未能從輸入文字中解析出任何有效的 LINE UID！`);
                 }
                 return;
             }
 
-            const confirmMsg = `比對結果分析：\n` +
-                `✅ 成功命中並待更新：${matchedCount} 筆\n` +
-                `⏭️ 重複 UID 已自動跳過：${duplicateSkippedCount} 筆\n` +
-                `❓ 查無客戶：${notFoundCount} 筆\n\n` +
-                `確定要立即將這 ${matchedCount} 筆 UID 同步寫入 Supabase 資料庫嗎？`;
+            const confirmMsg = `📋 解析處理統計：\n` +
+                `------------------------------------\n` +
+                `✅ 成功配對客戶並掛載：${matchedCount} 筆\n` +
+                `⏭️ 重複 UID 已自動略過：${duplicateSkippedCount} 筆\n` +
+                `📥 未配對成功（將轉入「待綁定清單」）：${toUnboundList.length} 筆\n` +
+                `------------------------------------\n` +
+                `是否確認立即同步更新至雲端？`;
 
             if (!confirm(confirmMsg)) return;
 
-            if (statusEl) statusEl.innerText = `正在寫入 ${updatedClients.length} 筆客戶資料至雲端...`;
+            if (statusEl) statusEl.innerText = `正在寫入雲端資料庫...`;
 
             try {
-                // 採用 Promise.all 並行精準 update，避免觸發 NOT NULL 限制
-                const updatePromises = updatedClients.map(c =>
-                    supabaseClient
-                        .from('customers')
-                        .update({ line_uids: c.line_uids })
-                        .eq('code', c.code)
-                );
+                // 1. 寫入配對成功的客戶
+                if (updatedClients.length > 0) {
+                    const cleanData = updatedClients.map(c => {
+                        const obj = { ...c };
+                        delete obj.docId;
+                        delete obj.created_at;
+                        return obj;
+                    });
 
-                const results = await Promise.all(updatePromises);
-
-                // 檢查是否有任何一筆失敗
-                const firstError = results.find(r => r.error);
-                if (firstError && firstError.error) {
-                    throw firstError.error;
+                    const resCust = await fetch(`${API_BASE_URL}/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(cleanData)
+                    });
+                    if (!resCust.ok) throw new Error(`寫入客戶資料失敗 (${resCust.status}): ` + await resCust.text());
                 }
 
-                if (statusEl) statusEl.innerText = `✅ 成功完成 ${matchedCount} 筆 UID 掛載！`;
+                // 2. 寫入未配對成功的資料至 unbound_requests
+                if (toUnboundList.length > 0) {
+                    const resUnbound = await fetch(`${API_BASE_URL}/api/unbound-requests`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(toUnboundList)
+                    });
+                    if (!resUnbound.ok) throw new Error(`轉入待綁定失敗 (${resUnbound.status}): ` + await resUnbound.text());
+                }
+
+                if (statusEl) statusEl.innerText = `✅ 作業完成！`;
                 document.getElementById('batch-uid-import-input').value = '';
 
+                createDataSnapshot(rawClients);
                 renderTableWithPagination();
-                alert(`🎉 批次配對大功告成！\n已成功將 ${matchedCount} 筆客戶掛載新 UID 至雲端資料庫。`);
+                if (typeof loadUnboundRequests === 'function') await loadUnboundRequests();
+
+                alert(`🎉 處理完成！\n已成功掛載 ${matchedCount} 筆 UID。\n${toUnboundList.length} 筆資料已成功寫入【LINE 待綁定維護】！`);
             } catch (err) {
-                console.error('批次掛載 UID 失敗:', err);
+                console.error('執行批次處理失敗:', err);
                 if (statusEl) statusEl.innerText = `❌ 更新失敗: ${err.message}`;
-                alert('寫入雲端失敗: ' + (err.message || err));
+                alert('寫入雲端失敗：\n' + (err.message || err));
             }
         }
-
-        async function ignoreUnboundRequest(reqId) {
-            if (!confirm("確定要忽略此筆請求嗎？")) return;
-            try {
-                await supabaseClient
-                    .from('unbound_requests')
-                    .update({ status: 'ignored' })
-                    .eq('id', reqId);
-                await loadUnboundRequests();
-            } catch (err) {
-                alert("操作失敗：" + err.message);
-            }
-        }
-
-        async function restoreUnboundRequest(reqId) {
-            try {
-                await supabaseClient
-                    .from('unbound_requests')
-                    .update({ status: 'pending' })
-                    .eq('id', reqId);
-                await loadUnboundRequests();
-            } catch (err) {
-                alert("復原失敗：" + err.message);
-            }
-        }
-
-
-
-        async function deleteUnboundRequest(reqId) {
-            if (!confirm("確定要刪除此筆歷史紀錄嗎？")) return;
-            try {
-                await supabaseClient
-                    .from('unbound_requests')
-                    .delete()
-                    .eq('id', reqId);
-                await loadUnboundRequests();
-            } catch (err) {
-                alert("刪除失敗：" + err.message);
-            }
-        }
+        
         // ==========================================
         // 鏡片照片壓縮與管理模組 (Base64 < 40KB)
         // ==========================================
