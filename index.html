@@ -1238,7 +1238,7 @@
                             <div class="filter-title" style="color: #2e7d32;">生日月份</div>
                             <div class="filter-btn-group" id="month-btn-group">
                                 <button class="btn-filter-month btn-filter-all active"
-                                    onclick="setMonthFilter('all', this)">全部</button>
+                                    onclick="setMonthFilter('all', this)">全</button>
                                 <script>
                                     for (let m = 1; m <= 12; m++) {
                                         document.write(`<button class="btn-filter-month" onclick="setMonthFilter(${m}, this)">${m}</button>`);
@@ -1251,7 +1251,7 @@
                             <div class="filter-title" style="color: #f57f17;">生日日期</div>
                             <div class="filter-btn-group" id="day-btn-group">
                                 <button class="btn-filter-day btn-filter-all active"
-                                    onclick="setDayFilter('all', this)">全部</button>
+                                    onclick="setDayFilter('all', this)">全</button>
                                 <script>
                                     for (let d = 1; d <= 31; d++) {
                                         document.write(`<button class="btn-filter-day" onclick="setDayFilter(${d}, this)">${d}</button>`);
@@ -1264,7 +1264,7 @@
                             <div class="filter-title" style="color: #475569;">商品類型</div>
                             <div class="filter-btn-group" id="product-filter-container">
                                 <button class="btn-filter-prod btn-filter-all active"
-                                    onclick="setProductFilter('all', this)">全部</button>
+                                    onclick="setProductFilter('all', this)">全</button>
                             </div>
                         </div>
                     </div>
@@ -2135,13 +2135,13 @@
                 <div style="font-weight: bold; font-size: 13px; color: #1e293b; margin-bottom: 6px;">🔄 一鍵批次替換全客戶商品代碼
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <select id="batch-replace-from-product" class="form-select"
-                        style="width: auto; min-width: 140px; font-size: 12px;"></select>
+                    <select id="batch_replace_old_prod" class="form-control"
+                        style="width: auto; min-width: 160px; font-size: 12px;"></select>
                     <span style="font-size: 12px; color: #64748b;">更換為 ➔</span>
-                    <input type="text" id="batch-replace-to-product" class="form-input" placeholder="輸入新商品名稱"
+                    <input type="text" id="batch_replace_new_prod" class="form-control" placeholder="輸入新商品名稱"
                         style="width: 160px; font-size: 12px;">
                     <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;"
-                        onclick="executeBatchProductReplace()">執行批次更換</button>
+                        onclick="executeBatchReplaceProduct()">執行批次更換</button>
                 </div>
             </div>
 
@@ -3289,6 +3289,8 @@
                 if (bulkIn) bulkIn.focus();
             } else if (tabId === 'tab-unbound') {
                 loadUnboundRequests();
+            } else if (tabId === 'tab-system') {
+                updateBatchReplaceDropdown();
             }
         }
 
@@ -3363,7 +3365,7 @@
         function buildProductFilterButtons() {
             const container = document.getElementById('product-filter-container');
             if (!container) return;
-            let html = `<button class="btn-filter-prod btn-filter-all ${currentProductFilter === 'all' ? 'active' : ''}" onclick="setProductFilter('all', this)">全部</button>`;
+            let html = `<button class="btn-filter-prod btn-filter-all ${currentProductFilter === 'all' ? 'active' : ''}" onclick="setProductFilter('all', this)">全</button>`;
             productList.forEach(p => {
                 html += `<button class="btn-filter-prod ${currentProductFilter === p ? 'active' : ''}" onclick="setProductFilter('${p}', this)">${p}</button>`;
             });
@@ -5896,21 +5898,41 @@
         }
         // 1. 刷新批次更換專用的舊商品下拉選單
         function updateBatchReplaceDropdown() {
-            const select = document.getElementById('batch_replace_old_prod');
+            const select = document.getElementById('batch_replace_old_prod') || document.getElementById('batch-replace-from-product');
             if (!select) return;
 
-            // 統計所有客戶實際擁有的商品代碼（含未在設定清單中的舊代碼）
-            const usedProducts = Array.from(new Set(rawClients.map(c => (c.product || '').trim()).filter(Boolean)));
-            if (usedProducts.length === 0) {
-                productList.forEach(p => { if (!usedProducts.includes(p)) usedProducts.push(p); });
+            // 收集「客戶資料表中已存在的商品」與「系統設定清單中的商品」
+            const productSet = new Set();
+            if (Array.isArray(rawClients)) {
+                rawClients.forEach(c => {
+                    const p = (c.product || '').trim();
+                    if (p) productSet.add(p);
+                });
+            }
+            if (Array.isArray(productList)) {
+                productList.forEach(p => {
+                    const pTrim = (p || '').trim();
+                    if (pTrim) productSet.add(pTrim);
+                });
             }
 
+            const usedProducts = Array.from(productSet);
+
             let html = '<option value="">請選擇欲替換的舊代碼</option>';
-            usedProducts.forEach(p => {
-                const count = rawClients.filter(c => (c.product || '').trim() === p).length;
-                html += `<option value="${p}">${p} (${count} 筆客戶)</option>`;
-            });
+            if (usedProducts.length === 0) {
+                html += '<option value="" disabled>(暫無任何商品紀錄)</option>';
+            } else {
+                usedProducts.forEach(p => {
+                    const count = Array.isArray(rawClients) ? rawClients.filter(c => (c.product || '').trim() === p).length : 0;
+                    html += `<option value="${p}">${p} (${count} 筆客戶)</option>`;
+                });
+            }
             select.innerHTML = html;
+        }
+
+        // 確保相容性別名
+        function executeBatchProductReplace() {
+            executeBatchReplaceProduct();
         }
 
         // 2. 執行批次替換核心邏輯
