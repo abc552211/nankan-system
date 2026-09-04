@@ -2509,7 +2509,13 @@
                 d = parseInt(parts[1], 10);
                 y = isBirthday ? 115 : currentFullYear; // 生日預設民國，其餘預設今年
             }
-            // 3. 處理完整日期 (如 2024/09/21 或 103/03/26)
+            // 3. 處理連打 7 碼純數字生日 (例: 0870825 -> 87/08/25)
+            else if (isBirthday && /^\d{7}$/.test(str)) {
+                y = parseInt(str.substring(0, 3), 10); // 自動去除前綴 0 (087 -> 87)
+                m = parseInt(str.substring(3, 5), 10);
+                d = parseInt(str.substring(5, 7), 10);
+            }
+            // 4. 處理完整日期 (如 2024/09/21 或 103/03/26 或 87/08/25)
             else if (str.includes('/') || str.includes('-')) {
                 const parts = str.replace(/-/g, '/').split('/');
                 if (parts.length >= 2) {
@@ -2526,7 +2532,11 @@
                     }
                 }
             } else {
-                return str;
+                // 生日防呆：若輸入非斜線格式且不滿 7 碼純數字，跳出警示
+                if (isBirthday && showAlert) {
+                    alert(`⚠️ 生日格式錯誤！請輸入民國 7 碼純數字（例：0870825）或標準格式（87/08/25）。您輸入的是：${str}`);
+                }
+                return isBirthday ? "" : str;
             }
 
             // ★ 核心合法性驗證 (防呆關鍵)
@@ -6083,11 +6093,11 @@
                     : `<div style="width:50px; height:50px; border-radius:50%; background:#e2e8f0; color:#94a3b8; display:flex; align-items:center; justify-content:center; font-size:24px; border:2px solid #cbd5e1;">👤</div>`;
 
                 html += `
-                    <div style="display:flex; align-items:center; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin-bottom:8px; position:relative;">
                         ${avatarHtml}
                         <div style="flex:1; min-width:0;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <div style="font-size:14.5px; font-weight:bold; color:${profile && profile.display_name ? '#1e293b' : '#64748b'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                <div style="font-size:14.5px; font-weight:bold; color:${profile && profile.display_name ? '#1e293b' : '#64748b'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:85%;">
                                     ${name}
                                 </div>
                             </div>
@@ -6098,6 +6108,7 @@
                                 <b>最近開啟：</b>${activeTimeText}
                             </div>
                         </div>
+                        <button type="button" class="btn btn-sm text-danger border-0 bg-transparent p-1" style="font-size:16px; font-weight:bold; cursor:pointer; line-height:1;" title="解除綁定此 UID" onclick="removeClientLineUid('${client.code}', '${uid}')">✕</button>
                     </div>
                 `;
             });
@@ -6126,6 +6137,71 @@
 
         function closeLineProfileModal() {
             document.getElementById('lineProfileModal').style.display = 'none';
+        }
+
+        // 刪除 / 解綁指定客戶的單一 LINE UID (需通過系統維護密碼驗證)
+        async function removeClientLineUid(clientCode, targetUid) {
+            const inputPwd = prompt("🔒 移除 LINE 綁定需要系統維護密碼：");
+            if (!inputPwd) return;
+
+            // 1. 驗證密碼是否與系統維護密碼相符
+            if (!systemCloudPassword || inputPwd.trim() !== systemCloudPassword.trim()) {
+                alert("❌ 密碼錯誤，拒絕執行解綁操作！");
+                return;
+            }
+
+            const client = rawClients.find(c => c.code === clientCode);
+            if (!client) {
+                alert("查無客戶資料！");
+                return;
+            }
+
+            if (!confirm(`確定要將 UID【${targetUid}】從客戶【${client.name}】的綁定名單中移除嗎？\n移除後家長將無法繼續查看該配戴者資料。`)) {
+                return;
+            }
+
+            // 2. 濾除該 UID
+            let currentUids = client.line_uids || client.lineUids || [];
+            if (typeof currentUids === 'string') {
+                currentUids = currentUids.replace(/[\{\}\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+            }
+            if (!Array.isArray(currentUids)) currentUids = [];
+
+            const newUids = currentUids.filter(u => u !== targetUid);
+
+            recordEditHistory(client.code, 'line_uids', client.line_uids);
+            client.line_uids = newUids;
+
+            // 3. 立即透過後端 Worker 儲存更新至雲端
+            try {
+                const cleanObj = { ...client };
+                delete cleanObj.docId;
+                delete cleanObj.created_at;
+
+                const res = await fetch(`${API_BASE_URL}/api/customers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([cleanObj])
+                });
+
+                if (!res.ok) throw new Error("寫入雲端失敗");
+
+                createDataSnapshot(rawClients);
+                hasUnsavedChanges = false;
+                applyAllFilters();
+
+                alert("🎉 已成功解除綁定該 LINE 帳號！");
+
+                // 若該客戶已無任何 UID 則自動關閉彈窗，否則即時刷新彈窗清單
+                if (newUids.length === 0) {
+                    closeLineProfileModal();
+                } else {
+                    openLineProfileModal(clientCode);
+                }
+            } catch (err) {
+                console.error("解綁失敗：", err);
+                alert("解綁儲存失敗：" + (err.message || err));
+            }
         }
 
         document.addEventListener("DOMContentLoaded", initApp);
