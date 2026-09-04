@@ -44,9 +44,11 @@
         body {
             font-family: "Noto Sans TC", "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
-            padding: 10px;
-            background-color: #f0f2f5;
+            padding: 12px;
+            /* 極淺灰綠溫潤漸層（霧面鼠尾草灰綠到暖灰米白） */
+            background: linear-gradient(145deg, #edf1ed 0%, #e6ebe6 100%);
             color: #2c3e50;
+            min-height: 100vh;
         }
 
         .barcode-code39 {
@@ -83,36 +85,46 @@
         #screen-view {
             max-width: 1850px;
             margin: 0 auto;
-            background: #fff;
-            padding: 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            /* 帶極淡灰綠微光的白色卡片，邊框更和諧自然 */
+            background: rgba(254, 255, 254, 0.96);
+            padding: 16px;
+            border-radius: 10px;
+            border: 1px solid #d5ded6;
+            box-shadow: 0 6px 20px rgba(88, 115, 93, 0.07);
         }
 
-        /* 頂部頁籤 */
+        /* 頂部頁籤（舒緩莫蘭迪草綠色系） */
         .nav-tabs {
             display: flex;
-            gap: 4px;
-            border-bottom: 2px solid #3498db;
-            margin-bottom: 10px;
+            gap: 5px;
+            border-bottom: 2.5px solid #5a8264;
+            margin-bottom: 12px;
         }
 
         .tab-btn {
-            padding: 6px 14px;
-            border: none;
-            background: #e9ecef;
+            padding: 7px 16px;
+            border: 1px solid #d0ded2;
+            border-bottom: none;
+            background: #e9efe9;
             cursor: pointer;
             font-size: 13.5px;
             font-weight: bold;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
-            color: #495057;
-            transition: 0.15s;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            color: #4b6150;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            background: #dfe8e0;
+            color: #2b3d30;
         }
 
         .tab-btn.active {
-            background: #3498db;
-            color: #fff;
+            background: #5a8264;
+            color: #ffffff;
+            border-color: #5a8264;
+            box-shadow: 0 -2px 6px rgba(90, 130, 100, 0.15);
         }
 
         .tab-content {
@@ -3687,6 +3699,19 @@
                             } else {
                                 td.innerHTML = `<span style="color:#cbd5e1;">-</span>`;
                             }
+                        }
+                    } else if (key === 'code' || key === 'overdueDays' || key === 'odAccumDays' || key === 'odDuration' || key === 'osAccumDays' || key === 'osDuration') {
+                        // 系統主鍵與自動計算欄位（含多久沒回診）：完全鎖死禁止點擊與編輯
+                        if (col.isOD) td.classList.add('col-od-cell');
+                        if (col.isOS) td.classList.add('col-os-cell');
+                        td.style.cursor = 'default';
+                        td.style.userSelect = 'text';
+
+                        let val = client[key] || '';
+                        if (key === 'overdueDays' && (val === '停用' || client.fdModify === '停用')) {
+                            td.innerHTML = `<span class="badge-stop">停用</span>`;
+                        } else {
+                            td.innerText = val;
                         }
                     } else {
                         td.className = 'editable';
