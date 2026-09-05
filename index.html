@@ -2576,11 +2576,11 @@
 
         function generateDateOptions() {
             const daysMap = ["日", "一", "二", "三", "四", "五", "六"];
-            const selectBoxes = [document.getElementById('bulk_print_date_select'), document.getElementById('batch_visitDate_select')];
-
-            let optionsHTML = "";
             const now = new Date();
 
+            // 1. 批量回診單印製：今天 ~ 未來5天
+            const bulkSelect = document.getElementById('bulk_print_date_select');
+            let futureOptionsHTML = "";
             for (let i = 0; i <= 5; i++) {
                 const target = new Date();
                 target.setDate(now.getDate() + i);
@@ -2588,13 +2588,91 @@
                 const m = String(target.getMonth() + 1).padStart(2, '0');
                 const d = String(target.getDate()).padStart(2, '0');
                 const dayName = daysMap[target.getDay()];
-
                 const dateVal = `${y}/${m}/${d}`;
-                const text = `${dateVal} (${dayName})`;
-                optionsHTML += `<option value="${dateVal}">${text}</option>`;
+                futureOptionsHTML += `<option value="${dateVal}">${dateVal} (${dayName})</option>`;
+            }
+            if (bulkSelect) bulkSelect.innerHTML = futureOptionsHTML;
+
+            // 2. 刷槍更新之回診日：包含今天往前5天 (今天 ~ 過去5天)
+            const batchSelect = document.getElementById('batch_visitDate_select');
+            let pastOptionsHTML = "";
+            for (let i = 0; i <= 5; i++) {
+                const target = new Date();
+                target.setDate(now.getDate() - i);
+                const y = target.getFullYear();
+                const m = String(target.getMonth() + 1).padStart(2, '0');
+                const d = String(target.getDate()).padStart(2, '0');
+                const dayName = daysMap[target.getDay()];
+                const dateVal = `${y}/${m}/${d}`;
+                pastOptionsHTML += `<option value="${dateVal}">${dateVal} (${dayName})</option>`;
+            }
+            if (batchSelect) batchSelect.innerHTML = pastOptionsHTML;
+
+            // 3. 單個列印確認彈窗之回診日：今天往後5天，預設今天並標註 [今天]
+            const singlePrintDateSelect = document.getElementById('single_print_date_select');
+            if (singlePrintDateSelect) {
+                let singleOptionsHTML = "";
+                for (let i = 0; i <= 5; i++) {
+                    const target = new Date();
+                    target.setDate(now.getDate() + i);
+                    const y = target.getFullYear();
+                    const m = String(target.getMonth() + 1).padStart(2, '0');
+                    const d = String(target.getDate()).padStart(2, '0');
+                    const dayName = daysMap[target.getDay()];
+                    const dateVal = `${y}/${m}/${d}`;
+                    const isToday = (i === 0);
+                    const labelText = isToday ? `${dateVal} (${dayName}) [今天]` : `${dateVal} (${dayName})`;
+                    singleOptionsHTML += `<option value="${dateVal}" ${isToday ? 'selected' : ''}>${labelText}</option>`;
+                }
+                singlePrintDateSelect.innerHTML = singleOptionsHTML;
+            }
+        }
+
+        // 單個列印暫存目標
+        let currentSinglePrintCode = null;
+
+        function printSingleChecklist(code) {
+            const client = rawClients.find(c => c.code === code);
+            if (!client) return;
+
+            currentSinglePrintCode = code;
+
+            // 填入彈窗資訊
+            const infoEl = document.getElementById('single_print_client_info');
+            if (infoEl) infoEl.innerText = `${client.name} (${client.code}) - ${client.product || '未填商品'}`;
+
+            // 同步主治醫師選單
+            const drSelect = document.getElementById('single_print_dr_select');
+            if (drSelect) {
+                let docHTML = "";
+                doctorList.forEach(dr => { docHTML += `<option value="${dr}">${dr}</option>`; });
+                drSelect.innerHTML = docHTML;
             }
 
-            selectBoxes.forEach(sb => { if (sb) sb.innerHTML = optionsHTML; });
+            // 開啟確認彈窗
+            const modal = document.getElementById('singlePrintConfirmModal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeSinglePrintModal() {
+            const modal = document.getElementById('singlePrintConfirmModal');
+            if (modal) modal.style.display = 'none';
+            currentSinglePrintCode = null;
+        }
+
+        function confirmSinglePrint() {
+            if (!currentSinglePrintCode) return;
+            const client = rawClients.find(c => c.code === currentSinglePrintCode);
+            if (!client) return;
+
+            const dateVal = document.getElementById('single_print_date_select').value;
+            const drVal = document.getElementById('single_print_dr_select').value;
+
+            const printWrapper = document.getElementById('print-page-wrapper');
+            printWrapper.innerHTML = generateChecklistHTML(client, dateVal, drVal);
+
+            closeSinglePrintModal();
+            window.print();
         }
 
         function copyVar(tag) {
@@ -4380,16 +4458,6 @@
         function clearBulkPrintList() {
             bulkPrintList = [];
             renderBulkPrintTable();
-        }
-
-        function printSingleChecklist(code) {
-            const client = rawClients.find(c => c.code === code);
-            if (!client) return;
-            const printWrapper = document.getElementById('print-page-wrapper');
-            const dateVal = document.getElementById('bulk_print_date_select').value;
-            const drVal = document.getElementById('bulk_print_dr_select').value;
-            printWrapper.innerHTML = generateChecklistHTML(client, dateVal, drVal);
-            window.print();
         }
 
         function executeBatchPrint() {
@@ -6424,6 +6492,41 @@
                     onkeydown="if(event.key==='Enter') applyCustomColor()">
                 <button type="button" class="btn btn-primary" style="padding:2px 8px; font-size:11px;"
                     onclick="applyCustomColor()">套用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 總表單個列印確認彈窗 -->
+    <div id="singlePrintConfirmModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center;">
+        <div
+            style="background:#fff; border-radius:8px; padding:20px; width:400px; max-width:90%; box-shadow:0 6px 25px rgba(0,0,0,0.3);">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; font-size:15px; color:#1e293b; font-weight:bold;">🖨️ 列印確認</h3>
+                <button onclick="closeSinglePrintModal()"
+                    style="border:none; background:none; font-size:18px; cursor:pointer; color:#64748b; line-height:1;">✕</button>
+            </div>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; margin-bottom:12px;">
+                <div style="font-size:11.5px; color:#64748b;">準備列印客戶：</div>
+                <div id="single_print_client_info" style="font-size:13.5px; font-weight:bold; color:#1e3a8a; margin-top:2px;">-</div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px;">
+                <div>
+                    <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:4px;">選擇回診檢查日期：</label>
+                    <select id="single_print_date_select" class="form-control" style="width:100%; font-size:13px;"></select>
+                </div>
+                <div>
+                    <label style="font-size:12.5px; font-weight:bold; color:#334155; display:block; margin-bottom:4px;">選擇主治醫師 (DR.)：</label>
+                    <select id="single_print_dr_select" class="form-control" style="width:100%; font-size:13px;"></select>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn btn-secondary" style="font-size:12.5px; padding:6px 14px;" onclick="closeSinglePrintModal()">取消</button>
+                <button class="btn btn-success" style="font-size:12.5px; padding:6px 16px;" onclick="confirmSinglePrint()">確定列印</button>
             </div>
         </div>
     </div>
