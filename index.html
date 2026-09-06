@@ -3468,9 +3468,6 @@
 
         async function savePrintRecordToDatabase(clientsArray, visitDate, doctorName) {
             if (!Array.isArray(clientsArray) || clientsArray.length === 0) return;
-            // 嚴格精準抓取卡片類型為 OK 塑型片的客戶
-            const okClients = clientsArray.filter(c => isClientOkLens(c.product));
-            if (okClients.length === 0) return;
 
             // 格式化回診日期 YYYY/MM/DD
             let pureVisitDate = visitDate;
@@ -3478,14 +3475,27 @@
                 pureVisitDate = pureVisitDate.split('(')[0].trim();
             }
 
-            const records = okClients.map(c => ({
+            // 取得商品對應的卡片類型名稱 (OK 塑型片 / 離焦大片 / 離焦日拋 / 眼鏡 / RGP 硬式 等)
+            const getCardTypeName = (prod) => {
+                const conf = productConfigMap[(prod || '').trim()] || {};
+                const typeMap = {
+                    'ok': 'OK 塑型片',
+                    'defocus_lens': '離焦大片',
+                    'defocus_daily': '離焦日拋',
+                    'glasses': '眼鏡',
+                    'rgp': 'RGP 硬式'
+                };
+                return typeMap[conf.cardType] || (isClientOkLens(prod) ? 'OK 塑型片' : (prod || '其他'));
+            };
+
+            const records = clientsArray.map(c => ({
                 code: c.code,
                 name: c.name,
                 birthday: c.birthday || '',
                 product: c.product || '',
                 visit_date: pureVisitDate,
                 doctor: doctorName || '',
-                card_type: 'OK 塑型片',
+                card_type: getCardTypeName(c.product),
                 created_at: new Date().toISOString()
             }));
 
