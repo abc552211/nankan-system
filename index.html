@@ -1537,26 +1537,27 @@
                     <span style="font-size: 12px; color: #64748b;">灰色欄位為系統自動計算項目，無須手動輸入</span>
                 </div>
 
-                                <table class="new-client-table">
+                                                <table class="new-client-table">
                     <tr>
                         <th>編號 (*必填)</th>
                         <td>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <input type="text" id="new_code" placeholder="例：A00099 (不可重複)" style="flex:1;"
-                                    oninput="validateNewClientCode()">
-                                <label
-                                    style="font-size:12px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:3px;">
+                            <input type="text" id="new_code" placeholder="例：A00099 (不可重複)" oninput="validateNewClientCode()">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                                <label style="font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:#2c3e50;">
                                     <input type="checkbox" id="auto_c_code_chk" onchange="handleAutoCCode(this)">
                                     非兒控自動給號 (C開頭)
                                 </label>
+                                <span id="new_code_msg" style="font-size:11px;"></span>
                             </div>
-                            <div id="new_code_msg" style="font-size: 11px; margin-top: 2px;"></div>
                         </td>
                         <th>姓名 (*必填)</th>
-                        <td><input type="text" id="new_name" placeholder="請輸入客戶姓名"></td>
+                        <td>
+                            <input type="text" id="new_name" placeholder="請輸入客戶姓名">
+                        </td>
                     </tr>
                     <tr>
                         <th>生日 (民國)</th>
+
 
                         <td><input type="text" id="new_birthday" placeholder="例：101/01/01"></td>
                         <th>電話</th>
