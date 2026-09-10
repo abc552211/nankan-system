@@ -6387,15 +6387,15 @@
         // 超低 KB 佔位圖（SVG 向量圖形，檔案小於 1 KB，節省 99% 資料庫空間）
         const EXPIRED_PHOTO_PLACEHOLDER = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23f1f5f9'/><text x='50%' y='45%' font-size='15' fill='%2394a3b8' font-weight='bold' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>照片閒置一年已移除</text><text x='50%' y='65%' font-size='12' fill='%23cbd5e1' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>Auto-Removed</text></svg>";
 
-        // 檢查並將超過 1 年的照片置換為超低 KB 佔位圖（僅針對 OK 塑型片客戶）
-        function checkAndCleanExpiredPhotos(clients) {
+        // 檢查並將超過 1 年的照片置換為超低 KB 佔位圖，並自動同步寫回資料庫釋放空間
+        async function checkAndCleanExpiredPhotos(clients) {
             if (!Array.isArray(clients)) return;
             const oneYearMs = 365 * 24 * 60 * 60 * 1000;
             const now = Date.now();
+            const clientsToUpdateInDb = [];
 
             const checkPhotoExpired = (photoStr) => {
                 if (!photoStr || photoStr === EXPIRED_PHOTO_PLACEHOLDER) return false;
-                // 從 Base64 解析 uploaded=YYYY-MM-DD
                 const match = photoStr.match(/uploaded=(\d{4}-\d{2}-\d{2})/);
                 if (match && match[1]) {
                     const uploadTime = new Date(match[1]).getTime();
@@ -6407,16 +6407,44 @@
             };
 
             clients.forEach(c => {
-                // ★ 關鍵防護：只有在確認客戶商品為「OK 塑型片」時才執行清理，眼鏡/離焦等產品照片一律保留
                 if (!isClientOkLens(c.product)) return;
 
+                let isChanged = false;
                 if (checkPhotoExpired(c.od_lens_photo)) {
                     c.od_lens_photo = EXPIRED_PHOTO_PLACEHOLDER;
+                    isChanged = true;
                 }
                 if (checkPhotoExpired(c.os_lens_photo)) {
                     c.os_lens_photo = EXPIRED_PHOTO_PLACEHOLDER;
+                    isChanged = true;
+                }
+
+                if (isChanged) {
+                    clientsToUpdateInDb.push({
+                        code: c.code,
+                        od_lens_photo: c.od_lens_photo,
+                        os_lens_photo: c.os_lens_photo
+                    });
                 }
             });
+
+            // ★ 核心關鍵：若有過期照片，自動在背景呼叫 API 寫回雲端，資料庫實質瘦身！
+            if (clientsToUpdateInDb.length > 0) {
+                console.log(`🧹 偵測到 ${clientsToUpdateInDb.length} 位客戶的塑型片照片超過一年，正在向雲端資料庫釋放空間...`);
+                try {
+                    const res = await fetch(`${API_BASE_URL}/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(clientsToUpdateInDb)
+                    });
+                    if (res.ok) {
+                        console.log(`✅ 雲端資料庫已成功抹除過期照片，真正完成實質瘦身！`);
+                        if (typeof updateDbStorageUsage === 'function') updateDbStorageUsage();
+                    }
+                } catch (e) {
+                    console.warn("背景釋放過期照片空間失敗：", e);
+                }
+            }
         }
 
         // ★ 強化版照片儲存：由 Worker 安全代理更新照片，不再依賴 supabaseClient
