@@ -1511,20 +1511,25 @@
             <div class="card-panel">
                 <div class="panel-header-bar" style="border-left-color: #0284c7;">
                     <h3>OK 塑型片回診列印暫存管理</h3>
-                    <span style="font-size: 12px; color: #64748b;">自動記錄單張/批量列印之 OK 塑型片客戶，供手機 B 程式回診清單使用（3天後自動清除）</span>
+                    <span style="font-size: 12px; color: #64748b;">自動記錄單張/批量列印之 OK 塑型片客戶，供手機 B 程式回診清單使用（100天後自動清除）</span>
                 </div>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-                    <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                         <span style="font-size:13px; font-weight:bold; color:#334155;">過濾日期：</span>
-                        <select id="recordFilterDate" class="form-control" style="width:170px; font-size:12px; cursor:pointer;" onchange="filterPrintRecordsTable()">
+                        <select id="recordFilterDate" class="form-control" style="width:160px; font-size:12px; cursor:pointer;" onchange="changeRecordFilterDate()">
                             <option value="">全部日期</option>
                         </select>
-                        <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('recordFilterDate').value=''; filterPrintRecordsTable();">全部</button>
+                        <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('recordFilterDate').value=''; changeRecordFilterDate();">全部</button>
+                        <!-- ★ 顯示「共 X 人」徽章 -->
+                        <span id="recordCountBadge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:12px; font-weight:bold; padding:3px 10px; border-radius:12px; white-space:nowrap;">共 0 人</span>
+                        
+                        <!-- 搜尋框 -->
+                        <input type="text" id="recordSearchInput" class="form-control" placeholder="搜尋編號或姓名..." style="width:140px; font-size:12px; padding:4px 8px;" oninput="onRecordSearchInput()">
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <button class="btn btn-primary" style="font-size:12px;" onclick="loadPrintRecords()">🔄 重新整理</button>
-                        <button class="btn btn-warning" style="font-size:12px;" onclick="cleanOldPrintRecordsManual()">清除3天前舊紀錄</button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" style="font-size:12px; background:#0284c7;" onclick="openDoctorStatsModal()">📊 醫師人次統計報表</button>
+                        <button class="btn btn-secondary" style="font-size:12px;" onclick="loadPrintRecords()">🔄 重新整理</button>
                         <button class="btn btn-danger" style="font-size:12px;" onclick="clearFilteredPrintRecords()">清空下列紀錄</button>
                     </div>
                 </div>
@@ -1550,6 +1555,25 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- ★ 專屬分頁控制列 -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:12.5px; padding:4px 6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span id="recordPaginationInfo" style="color:#64748b;">顯示第 0 頁，共 0 頁</span>
+                        <span style="color:#cbd5e1;">|</span>
+                        <span>每頁：</span>
+                        <select id="recordPageSizeSelect" class="form-control" style="width:auto; font-size:11.5px; padding:2px 6px;" onchange="changeRecordPageSize(this.value)">
+                            <option value="20">20 筆</option>
+                            <option value="50" selected>50 筆</option>
+                            <option value="100">100 筆</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button class="btn btn-secondary" style="padding:3px 10px; font-size:11.5px;" id="recordPrevBtn" onclick="changeRecordPage(-1)">上一頁</button>
+                        <span id="recordPageIndicator" style="font-weight:bold; padding:0 6px;">1 / 1</span>
+                        <button class="btn btn-secondary" style="padding:3px 10px; font-size:11.5px;" id="recordNextBtn" onclick="changeRecordPage(1)">下一頁</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3551,14 +3575,20 @@
 
         let currentLoadedPrintRecords = [];
 
+        // 暫存紀錄專屬分頁狀態變數
+        let recordCurrentPage = 1;
+        let recordPageSize = 50;
+        let recordFilteredList = [];
+
         async function loadPrintRecords() {
             const tbody = document.getElementById('printRecordsTableBody');
             if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #3b82f6;">讀取暫存紀錄中...</td></tr>`;
 
             try {
                 let data = [];
+                // 解除 500 筆上限限制，拉取完整 100 天紀錄
                 if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-                    const res = await supabaseClient.from('print_records').select('*').order('id', { ascending: false }).limit(500);
+                    const res = await supabaseClient.from('print_records').select('*').order('id', { ascending: false }).limit(5000);
                     data = res.data || [];
                 } else {
                     const res = await fetch(`${API_BASE_URL}/api/print-records`);
@@ -3566,7 +3596,7 @@
                 }
                 currentLoadedPrintRecords = Array.isArray(data) ? data : [];
 
-                // 動態更新「過濾日期」下拉選單：只抓取現有紀錄中的不重複日期
+                // 動態更新「過濾日期」下拉選單
                 const dateSelect = document.getElementById('recordFilterDate');
                 if (dateSelect) {
                     const currentSelectedVal = dateSelect.value;
@@ -3587,33 +3617,94 @@
                     });
                 }
 
+                recordCurrentPage = 1;
                 filterPrintRecordsTable();
             } catch (e) {
                 if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #ef4444;">讀取失敗：${e.message || e}</td></tr>`;
             }
         }
 
+        function changeRecordFilterDate() {
+            recordCurrentPage = 1;
+            filterPrintRecordsTable();
+        }
+
+        function onRecordSearchInput() {
+            recordCurrentPage = 1;
+            filterPrintRecordsTable();
+        }
+
+        function changeRecordPageSize(val) {
+            recordPageSize = parseInt(val, 10) || 50;
+            recordCurrentPage = 1;
+            renderPaginatedPrintRecords();
+        }
+
+        function changeRecordPage(dir) {
+            recordCurrentPage += dir;
+            renderPaginatedPrintRecords();
+            const container = document.querySelector('#tab-print-records .table-container');
+            if (container) container.scrollTop = 0;
+        }
+
         function filterPrintRecordsTable() {
-            const tbody = document.getElementById('printRecordsTableBody');
-            if (!tbody) return;
             const filterDate = (document.getElementById('recordFilterDate')?.value || '').trim();
+            const keyword = (document.getElementById('recordSearchInput')?.value || '').trim().toLowerCase();
 
             let list = currentLoadedPrintRecords;
             if (filterDate) {
                 list = list.filter(r => (r.visit_date || '').includes(filterDate));
             }
+            if (keyword) {
+                list = list.filter(r => 
+                    (r.name || '').toLowerCase().includes(keyword) || 
+                    (r.code || '').toLowerCase().includes(keyword) ||
+                    (r.doctor || '').toLowerCase().includes(keyword)
+                );
+            }
 
-            if (list.length === 0) {
+            recordFilteredList = list;
+
+            // ★ 更新「全部」按鈕旁邊的「共 X 人」徽章
+            const countBadge = document.getElementById('recordCountBadge');
+            if (countBadge) {
+                countBadge.innerText = `共 ${list.length} 人`;
+            }
+
+            renderPaginatedPrintRecords();
+        }
+
+        function renderPaginatedPrintRecords() {
+            const tbody = document.getElementById('printRecordsTableBody');
+            const infoEl = document.getElementById('recordPaginationInfo');
+            const indicatorEl = document.getElementById('recordPageIndicator');
+            const prevBtn = document.getElementById('recordPrevBtn');
+            const nextBtn = document.getElementById('recordNextBtn');
+            if (!tbody) return;
+
+            if (recordFilteredList.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #94a3b8;">查無任何回診列印暫存紀錄。</td></tr>`;
+                if (infoEl) infoEl.innerText = `顯示第 0 頁，共 0 頁 (共 0 筆)`;
+                if (indicatorEl) indicatorEl.innerText = `0 / 0`;
+                if (prevBtn) prevBtn.disabled = true;
+                if (nextBtn) nextBtn.disabled = true;
                 return;
             }
 
+            const totalPages = Math.ceil(recordFilteredList.length / recordPageSize) || 1;
+            if (recordCurrentPage > totalPages) recordCurrentPage = totalPages;
+            if (recordCurrentPage < 1) recordCurrentPage = 1;
+
+            const startIndex = (recordCurrentPage - 1) * recordPageSize;
+            const endIndex = Math.min(startIndex + recordPageSize, recordFilteredList.length);
+            const pageData = recordFilteredList.slice(startIndex, endIndex);
+
             tbody.innerHTML = '';
-            list.forEach((item, idx) => {
+            pageData.forEach((item, idx) => {
                 const tr = document.createElement('tr');
                 const timeStr = item.created_at ? new Date(item.created_at).toLocaleString('zh-TW', { hour12: false }) : '-';
                 tr.innerHTML = `
-                    <td>${idx + 1}</td>
+                    <td>${startIndex + idx + 1}</td>
                     <td style="font-weight:bold; color:#0284c7;">${item.visit_date}</td>
                     <td>${item.doctor || '-'}</td>
                     <td style="font-weight:bold;">${item.code}</td>
@@ -3627,6 +3718,11 @@
                 `;
                 tbody.appendChild(tr);
             });
+
+            if (infoEl) infoEl.innerText = `顯示第 ${startIndex + 1} - ${endIndex} 筆，共 ${recordFilteredList.length} 筆`;
+            if (indicatorEl) indicatorEl.innerText = `${recordCurrentPage} / ${totalPages}`;
+            if (prevBtn) prevBtn.disabled = (recordCurrentPage === 1);
+            if (nextBtn) nextBtn.disabled = (recordCurrentPage === totalPages);
         }
 
         async function deleteSinglePrintRecord(id) {
@@ -3644,10 +3740,10 @@
             }
         }
 
+        // 自動/背景維護：將清理門檻改為 100 天前
         async function cleanOldPrintRecordsManual() {
-            if (!confirm("確定要清除所有看診日已超過 3 天的舊紀錄嗎？")) return;
             const threshold = new Date();
-            threshold.setDate(threshold.getDate() - 3);
+            threshold.setDate(threshold.getDate() - 100);
             const ty = threshold.getFullYear();
             const tm = String(threshold.getMonth() + 1).padStart(2, '0');
             const td = String(threshold.getDate()).padStart(2, '0');
@@ -3656,11 +3752,11 @@
             try {
                 if (typeof supabaseClient !== 'undefined' && supabaseClient) {
                     await supabaseClient.from('print_records').delete().lt('visit_date', limitDateStr);
+                } else {
+                    await fetch(`${API_BASE_URL}/api/print-records-clean-old?days=100`, { method: 'DELETE' }).catch(() => {});
                 }
-                alert("清理完成！");
-                await loadPrintRecords();
             } catch (err) {
-                alert("清理失敗：" + err.message);
+                console.warn("背景自動清理舊紀錄略過：", err);
             }
         }
 
@@ -6995,6 +7091,237 @@
             </div>
         </div>
     </div>
+
+    <!-- ★ 醫師回診統計報表彈窗 (週/月統計 + 一鍵匯出 Excel) -->
+    <div id="doctorStatsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center;">
+        <div style="background:#fff; border-radius:10px; padding:20px; width:880px; max-width:94vw; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,0.35);">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #e2e8f0; padding-bottom:10px; margin-bottom:12px;">
+                <div>
+                    <h3 style="margin:0; font-size:16px; color:#1e293b;">📊 醫師回診人次統計分析報表 (過去 100 天)</h3>
+                    <div style="font-size:12px; color:#64748b; margin-top:2px;">依看診日期自動統計每週/每月回診人次，支援匯出 Excel 報表</div>
+                </div>
+                <button onclick="closeDoctorStatsModal()" style="border:none; background:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
+            </div>
+
+            <!-- 控制工具列：週/月切換、商品篩選、匯出按鈕 -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12.5px; font-weight:bold; color:#334155;">統計週期：</span>
+                    <label style="font-size:12.5px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                        <input type="radio" name="statsPeriodType" value="month" checked onchange="renderDoctorStatsTable()"> 按月統計
+                    </label>
+                    <label style="font-size:12.5px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; margin-left:6px;">
+                        <input type="radio" name="statsPeriodType" value="week" onchange="renderDoctorStatsTable()"> 按週統計 (ISO 週別)
+                    </label>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-success" style="font-size:12px; background:#16a34a;" onclick="exportDoctorStatsToExcel()">📥 匯出 Excel 報表 (.xlsx)</button>
+                    <button class="btn btn-secondary" style="font-size:12px;" onclick="closeDoctorStatsModal()">關閉</button>
+                </div>
+            </div>
+
+            <!-- 報表預覽表格 -->
+            <div class="table-container" style="flex:1; max-height:55vh; overflow:auto; border:1px solid #cbd5e1; border-radius:6px;">
+                <table class="data-table" id="doctorStatsTable" style="font-size:12.5px; width:100%;">
+                    <thead id="doctorStatsThead"></thead>
+                    <tbody id="doctorStatsTbody"></tbody>
+                </table>
+            </div>
+            
+            <div id="doctorStatsSummary" style="font-size:12px; color:#64748b; margin-top:8px; text-align:right; font-weight:bold;">
+                總計回診：0 人次
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 醫師回診統計報表計算與 Excel 匯出模組
+        // ==========================================
+        let currentStatsCache = { periods: [], doctors: [], matrix: {}, totalsByPeriod: {}, totalsByDoctor: {}, grandTotal: 0 };
+
+        function openDoctorStatsModal() {
+            const modal = document.getElementById('doctorStatsModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                renderDoctorStatsTable();
+            }
+        }
+
+        function closeDoctorStatsModal() {
+            const modal = document.getElementById('doctorStatsModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // 輔助函式：計算日期所屬的 ISO 週別 (例如: 2026-W36)
+        function getYearWeekKey(dateStr) {
+            if (!dateStr || !dateStr.includes('/')) return '未知週別';
+            const parts = dateStr.split('/');
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (isNaN(d.getTime())) return '未知週別';
+
+            d.setHours(0, 0, 0, 0);
+            // 週四所在的年份決定週次
+            d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+            const week1 = new Date(d.getFullYear(), 0, 4);
+            const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+            return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+        }
+
+        // 輔助函式：計算月份 Key (例如: 2026-09)
+        function getYearMonthKey(dateStr) {
+            if (!dateStr || !dateStr.includes('/')) return '未知月份';
+            const parts = dateStr.split('/');
+            const y = parts[0];
+            const m = String(parts[1]).padStart(2, '0');
+            return `${y}-${m}`;
+        }
+
+        function calculateDoctorStats(periodType = 'month') {
+            const records = currentLoadedPrintRecords || [];
+            const docSet = new Set();
+            const periodSet = new Set();
+            const matrix = {}; // { periodKey: { docName: count } }
+            const totalsByDoctor = {};
+            const totalsByPeriod = {};
+            let grandTotal = 0;
+
+            records.forEach(r => {
+                const dateStr = (r.visit_date || '').trim();
+                if (!dateStr) return;
+
+                const doc = (r.doctor || '未指定醫師').trim();
+                const periodKey = periodType === 'week' ? getYearWeekKey(dateStr) : getYearMonthKey(dateStr);
+
+                docSet.add(doc);
+                periodSet.add(periodKey);
+
+                if (!matrix[periodKey]) matrix[periodKey] = {};
+                matrix[periodKey][doc] = (matrix[periodKey][doc] || 0) + 1;
+
+                totalsByDoctor[doc] = (totalsByDoctor[doc] || 0) + 1;
+                totalsByPeriod[periodKey] = (totalsByPeriod[periodKey] || 0) + 1;
+                grandTotal++;
+            });
+
+            // 排序週期 (近到遠) 與 醫師
+            const periods = Array.from(periodSet).sort().reverse();
+            const doctors = Array.from(docSet).sort();
+
+            currentStatsCache = { periods, doctors, matrix, totalsByPeriod, totalsByDoctor, grandTotal, periodType };
+            return currentStatsCache;
+        }
+
+        function renderDoctorStatsTable() {
+            const periodType = document.querySelector('input[name="statsPeriodType"]:checked')?.value || 'month';
+            const stats = calculateDoctorStats(periodType);
+
+            const thead = document.getElementById('doctorStatsThead');
+            const tbody = document.getElementById('doctorStatsTbody');
+            const summary = document.getElementById('doctorStatsSummary');
+            if (!thead || !tbody) return;
+
+            const periodTitle = periodType === 'week' ? '週別 (年-週)' : '月份 (年-月)';
+
+            // 1. 表頭
+            let thHtml = `<tr><th style="min-width:110px; background:#f1f5f9;">${periodTitle}</th>`;
+            stats.doctors.forEach(doc => {
+                thHtml += `<th style="background:#f1f5f9;">${doc}</th>`;
+            });
+            thHtml += `<th style="background:#e2e8f0; font-weight:bold; min-width:80px;">單期合計</th></tr>`;
+            thead.innerHTML = thHtml;
+
+            // 2. 表身
+            if (stats.periods.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${stats.doctors.length + 2}" style="padding:25px; color:#94a3b8;">暫無足夠的回診資料可供統計分析。</td></tr>`;
+                if (summary) summary.innerText = `總計回診：0 人次`;
+                return;
+            }
+
+            let tbodyHtml = '';
+            stats.periods.forEach(periodKey => {
+                tbodyHtml += `<tr><td style="font-weight:bold; color:#0284c7;">${periodKey}</td>`;
+                stats.doctors.forEach(doc => {
+                    const count = (stats.matrix[periodKey] && stats.matrix[periodKey][doc]) ? stats.matrix[periodKey][doc] : 0;
+                    tbodyHtml += `<td>${count > 0 ? `<b style="color:#1e293b;">${count}</b>` : '<span style="color:#cbd5e1;">0</span>'}</td>`;
+                });
+                tbodyHtml += `<td style="background:#f8fafc; font-weight:bold; color:#16a34a;">${stats.totalsByPeriod[periodKey] || 0}</td></tr>`;
+            });
+
+            // 3. 總計列
+            tbodyHtml += `<tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1;"><td style="color:#1e293b;">總計</td>`;
+            stats.doctors.forEach(doc => {
+                tbodyHtml += `<td style="color:#0284c7;">${stats.totalsByDoctor[doc] || 0}</td>`;
+            });
+            tbodyHtml += `<td style="color:#dc2626; font-size:13.5px;">${stats.grandTotal}</td></tr>`;
+
+            tbody.innerHTML = tbodyHtml;
+            if (summary) summary.innerText = `過去 100 天總計回診：${stats.grandTotal} 人次 (共 ${stats.periods.length} 個統計週期)`;
+        }
+
+        // 一鍵將統計表 + 明細表匯出為多工作表 Excel 檔
+        function exportDoctorStatsToExcel() {
+            if (!window.XLSX) {
+                alert("Excel 引擎載入中，請稍候重試！");
+                return;
+            }
+            const stats = currentStatsCache;
+            if (!stats || stats.periods.length === 0) {
+                alert("目前無任何統計資料可供匯出！");
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+
+            // 工作表 1：人次統計摘要矩陣
+            const periodColName = stats.periodType === 'week' ? '週別' : '月份';
+            const matrixHeaders = [periodColName, ...stats.doctors, '合計'];
+            const matrixRows = [matrixHeaders];
+
+            stats.periods.forEach(p => {
+                const row = [p];
+                stats.doctors.forEach(doc => {
+                    row.push((stats.matrix[p] && stats.matrix[p][doc]) || 0);
+                });
+                row.push(stats.totalsByPeriod[p] || 0);
+                matrixRows.push(row);
+            });
+
+            // 統計總計列
+            const totalRow = ['總計'];
+            stats.doctors.forEach(doc => {
+                totalRow.push(stats.totalsByDoctor[doc] || 0);
+            });
+            totalRow.push(stats.grandTotal);
+            matrixRows.push(totalRow);
+
+            const wsStats = XLSX.utils.aoa_to_sheet(matrixRows);
+            XLSX.utils.book_append_sheet(wb, wsStats, "醫師回診人次統計");
+
+            // 工作表 2：100 天原始回診明細清單
+            const detailHeaders = ["項次", "回診日期", "主治醫師", "客戶編號", "客戶姓名", "生日", "商品名稱", "建檔時間"];
+            const detailRows = [detailHeaders];
+            const records = currentLoadedPrintRecords || [];
+            records.forEach((r, idx) => {
+                detailRows.push([
+                    idx + 1,
+                    r.visit_date || '',
+                    r.doctor || '',
+                    r.code || '',
+                    r.name || '',
+                    r.birthday || '',
+                    r.product || '',
+                    r.created_at ? new Date(r.created_at).toLocaleString('zh-TW', { hour12: false }) : ''
+                ]);
+            });
+
+            const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+            XLSX.utils.book_append_sheet(wb, wsDetail, "回診詳細名單");
+
+            const fileName = `醫師回診人次統計報表_${stats.periodType === 'week' ? '按週' : '按月'}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+    </script>
 </body>
 
 </html>
