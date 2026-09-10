@@ -1177,6 +1177,31 @@
             border-color: #0284c7;
             box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
         }
+
+        /* 讀取中轉圈動畫與呼吸燈效果 */
+        .table-loading-spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3.5px solid #e2e8f0;
+            border-top-color: #5a8264;
+            border-radius: 50%;
+            animation: spinTable 0.75s linear infinite;
+            vertical-align: middle;
+            margin-bottom: 8px;
+        }
+        @keyframes spinTable {
+            to { transform: rotate(360deg); }
+        }
+        .pulse-text {
+            animation: pulseFade 1.2s ease-in-out infinite;
+            font-weight: bold;
+            color: #5a8264;
+        }
+        @keyframes pulseFade {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 
@@ -4340,7 +4365,20 @@
             applyAllFilters();
 
             const summary = document.getElementById('table-summary');
-            if (summary) summary.innerText = "連線雲端資料庫中...";
+            if (summary) summary.innerHTML = `<span class="pulse-text">⏳ 連線雲端資料庫中...</span>`;
+
+            // ★ 表格中央同步顯示專屬讀取動畫，避免空白或死板
+            const tbodyInit = document.getElementById('customerTableBody');
+            if (tbodyInit) {
+                tbodyInit.innerHTML = `
+                    <tr>
+                        <td colspan="${columnOrder.length}" style="padding: 50px 20px; text-align: center; background: #fafafa;">
+                            <div class="table-loading-spinner"></div>
+                            <div class="pulse-text" style="font-size: 13.5px; letter-spacing: 0.5px;">正在同步雲端資料庫資料，請稍候...</div>
+                        </td>
+                    </tr>
+                `;
+            }
 
             try {
                 await loadSettings();
@@ -4376,12 +4414,19 @@
                         updateDropdowns(); // ★ 加上這一行：資料庫讀取完畢後立刻重新計
                     }
 
-                    // 2. 建立 Realtime 即時推播監聽 (家長一綁定，後台自動秒級同步，免按 F5)
-                    supabaseClient
-                        
-                            trackRealtimeMessage(1);
-                            if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                    // 2. 建立資料庫異動監聽與過期照片檢查引擎
+                    checkAndCleanExpiredPhotos(rawClients);
+
+                    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                        supabaseClient
+                            .channel('public:customers')
+                            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
+                                trackRealtimeMessage(1);
+                                if (hasUnsavedChanges) return; // 使用者正在編輯時暫緩覆蓋畫面
+
                                 const updatedRow = payload.new;
+                                if (!updatedRow || !updatedRow.code) return;
+
                                 const idx = rawClients.findIndex(c => c.code === updatedRow.code);
 
                                 updatedRow.birthday = formatExcelDate(updatedRow.birthday, true);
@@ -4392,9 +4437,9 @@
                                 updatedRow.firstPickup = formatExcelDate(updatedRow.firstPickup, false);
                                 updatedRow.serviceDate = formatExcelDate(updatedRow.serviceDate, false);
                                 updatedRow.contactDate = formatExcelDate(updatedRow.contactDate, false);
-
                                 updatedRow.od_lens_photo = updatedRow.od_lens_photo || '';
                                 updatedRow.os_lens_photo = updatedRow.os_lens_photo || '';
+
                                 if (!updatedRow.line_uids) {
                                     updatedRow.line_uids = [];
                                 } else if (typeof updatedRow.line_uids === 'string') {
@@ -4404,17 +4449,17 @@
                                 calculateDynamicFields(updatedRow);
 
                                 if (idx !== -1) {
-                                    rawClients[idx] = updatedRow; // 更新現有資料
+                                    rawClients[idx] = updatedRow;
                                 } else {
-                                    rawClients.unshift(updatedRow); // 新增資料
+                                    rawClients.unshift(updatedRow);
                                 }
 
-                                applyAllFilters(); // 自動刷新畫面
-                            }
-                            trackRealtimeMessage(1);
-                            if (typeof loadUnboundRequests === 'function') {
-                                loadUnboundRequests();
-                            }
+                                checkAndCleanExpiredPhotos([updatedRow]);
+                                createDataSnapshot(rawClients);
+                                applyAllFilters(); // 資料庫有更新時，秒級自動刷新總表
+                            })
+                            .subscribe();
+                    }
                         
                 }
             } catch (err) {
@@ -6312,28 +6357,66 @@
             };
 
             try {
-                const base64Data = await compressImageToBase64(file, watermarkInfo, 600, 0.65);
+                const rawBase64 = await compressImageToBase64(file, watermarkInfo, 600, 0.65);
 
-                // 記錄歷史並更新本地物件
+                // 免加欄位：直接將「上傳時間戳記 (YYYY-MM-DD)」嵌入在 Base64 字串開頭
+                const todayIso = new Date().toISOString().slice(0, 10);
+                const base64DataWithTime = rawBase64.replace('data:image/jpeg;base64,', `data:image/jpeg;uploaded=${todayIso};base64,`);
+
                 recordEditHistory(client.code, currentPhotoTarget.key, client[currentPhotoTarget.key] || '');
-                client[currentPhotoTarget.key] = base64Data;
+                client[currentPhotoTarget.key] = base64DataWithTime;
 
-                // ★ 同步更新本地快照，防止 Realtime 覆蓋造成另一張照片消失
+                // 同步更新本地快照
                 if (typeof originalClientsSnapshot !== 'undefined') {
                     originalClientsSnapshot[client.code] = JSON.stringify(client);
                 }
 
                 applyAllFilters();
                 
-                // ★ 寫入雲端 (同時保護兩張照片欄位)
+                // 寫入雲端原有的照片欄位
                 await savePhotoToCloud(client.code, client.od_lens_photo || '', client.os_lens_photo || '');
                 
                 const wmDesc = eyeName ? `${maskedName}  ${eyeName}  ${dateStr}` : `${maskedName}  ${dateStr}`;
-                alert(`照片上傳成功！\n已壓印浮水印：【${wmDesc}】`);
+                alert(`照片上傳成功！\n已嵌入時間標記：${todayIso}\n浮水印：【${wmDesc}】`);
             } catch (err) {
                 console.error("照片處理失敗：", err);
                 alert("照片上傳壓縮失敗：" + err.message);
             }
+        }
+
+        // 超低 KB 佔位圖（SVG 向量圖形，檔案小於 1 KB，節省 99% 資料庫空間）
+        const EXPIRED_PHOTO_PLACEHOLDER = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23f1f5f9'/><text x='50%' y='45%' font-size='15' fill='%2394a3b8' font-weight='bold' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>照片閒置一年已移除</text><text x='50%' y='65%' font-size='12' fill='%23cbd5e1' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>Auto-Removed</text></svg>";
+
+        // 檢查並將超過 1 年的照片置換為超低 KB 佔位圖（僅針對 OK 塑型片客戶）
+        function checkAndCleanExpiredPhotos(clients) {
+            if (!Array.isArray(clients)) return;
+            const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+
+            const checkPhotoExpired = (photoStr) => {
+                if (!photoStr || photoStr === EXPIRED_PHOTO_PLACEHOLDER) return false;
+                // 從 Base64 解析 uploaded=YYYY-MM-DD
+                const match = photoStr.match(/uploaded=(\d{4}-\d{2}-\d{2})/);
+                if (match && match[1]) {
+                    const uploadTime = new Date(match[1]).getTime();
+                    if (!isNaN(uploadTime) && (now - uploadTime > oneYearMs)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            clients.forEach(c => {
+                // ★ 關鍵防護：只有在確認客戶商品為「OK 塑型片」時才執行清理，眼鏡/離焦等產品照片一律保留
+                if (!isClientOkLens(c.product)) return;
+
+                if (checkPhotoExpired(c.od_lens_photo)) {
+                    c.od_lens_photo = EXPIRED_PHOTO_PLACEHOLDER;
+                }
+                if (checkPhotoExpired(c.os_lens_photo)) {
+                    c.os_lens_photo = EXPIRED_PHOTO_PLACEHOLDER;
+                }
+            });
         }
 
         // ★ 強化版照片儲存：由 Worker 安全代理更新照片，不再依賴 supabaseClient
