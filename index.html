@@ -4621,8 +4621,11 @@
 
             if (!confirm(`系統偵測到共【${changedClients.length}】筆客戶有修改，是否立即同步更新至雲端？`)) return;
 
+            const summary = document.getElementById('table-summary');
+            if (summary) summary.innerHTML = `<span class="pulse-text">⏳ 資料分批同步至雲端中，請稍候...</span>`;
+
             try {
-                // 3. 只打包有更動的資料，移除內部暫存欄位
+                // 3. 清理暫存欄位
                 const cleanData = changedClients.map(c => {
                     const obj = { ...c };
                     delete obj.docId;
@@ -4630,24 +4633,35 @@
                     return obj;
                 });
 
-                // 4. 透過 Cloudflare Worker 代理安全寫入
-                const res = await fetch(`${API_BASE_URL}/api/customers`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(cleanData)
-                });
+                // 4. 採用分批傳輸 (每批 60 筆)，防止 Cloudflare Worker 逾時或封包過大
+                const CHUNK_SIZE = 60;
+                for (let i = 0; i < cleanData.length; i += CHUNK_SIZE) {
+                    const chunk = cleanData.slice(i, i + CHUNK_SIZE);
+                    const res = await fetch(`${API_BASE_URL}/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(chunk)
+                    });
 
-                if (!res.ok) throw new Error("寫入雲端失敗");
+                    if (!res.ok) {
+                        const errTxt = await res.text();
+                        throw new Error(`第 ${i + 1} 至 ${Math.min(i + CHUNK_SIZE, cleanData.length)} 筆上傳失敗 (${res.status}): ${errTxt}`);
+                    }
+                }
 
-                // 5. 儲存成功後，重新刷新快照並重設修改旗標
+                // 5. 全部批次成功後，才刷新快照與變更旗標
                 createDataSnapshot(rawClients);
                 hasUnsavedChanges = false;
                 applyAllFilters();
 
-                alert(`🎉 成功同步！僅精準更新了 ${changedClients.length} 筆有異動的客戶。`);
+                alert(`🎉 成功同步！已分批將 ${changedClients.length} 筆客戶完整更新至雲端。`);
             } catch (err) {
                 console.error("儲存失敗：", err);
-                alert("儲存失敗！\n原因：" + (err.message || err));
+                if (summary) {
+                    summary.innerText = "⚠️ 上傳失敗，請檢查網路後重新點擊「儲存至雲端」";
+                    summary.style.color = '#ef4444';
+                }
+                alert("儲存至雲端失敗！\n\n原因：" + (err.message || err) + "\n\n提示：本機異動尚未遺失，請確認網路連線正常後再次點擊「儲存至雲端」。");
             }
         }
 
