@@ -1321,8 +1321,8 @@
 
                     <input type="text" id="searchInput" class="form-control"
                         style="width: 220px; padding: 5px 8px; font-size: 13px;" placeholder="搜尋姓名、編號、ID或電話..."
-                        onkeydown="if(event.key==='Enter') applyAllFilters()">
-                    <button class="btn btn-primary" onclick="applyAllFilters()">搜尋</button>
+                        onkeydown="if(event.key==='Enter') onSearchTrigger()">
+                    <button class="btn btn-primary" onclick="onSearchTrigger()">搜尋</button>
                     <button class="btn btn-secondary"
                         onclick="document.getElementById('searchInput').value=''; applyAllFilters();"
                         style="padding: 5px 8px;">清空</button>
@@ -2713,9 +2713,9 @@
             const daysMap = ["日", "一", "二", "三", "四", "五", "六"];
             const now = new Date();
 
-            // 1. 批量回診單印製：今天 ~ 未來5天
+            // 1. 批量回診單印製：今天 ~ 未來5天（預設未選擇）
             const bulkSelect = document.getElementById('bulk_print_date_select');
-            let futureOptionsHTML = "";
+            let futureOptionsHTML = `<option value="" selected>未選擇</option>`;
             for (let i = 0; i <= 5; i++) {
                 const target = new Date();
                 target.setDate(now.getDate() + i);
@@ -2743,10 +2743,10 @@
             }
             if (batchSelect) batchSelect.innerHTML = pastOptionsHTML;
 
-            // 3. 單個列印確認彈窗之回診日：今天往後5天，預設今天並標註 [今天]
+            // 3. 單個列印確認彈窗之回診日：今天往後5天（預設未選擇）
             const singlePrintDateSelect = document.getElementById('single_print_date_select');
             if (singlePrintDateSelect) {
-                let singleOptionsHTML = "";
+                let singleOptionsHTML = `<option value="" selected>未選擇</option>`;
                 for (let i = 0; i <= 5; i++) {
                     const target = new Date();
                     target.setDate(now.getDate() + i);
@@ -2757,7 +2757,7 @@
                     const dateVal = `${y}/${m}/${d}`;
                     const isToday = (i === 0);
                     const labelText = isToday ? `${dateVal} (${dayName}) [今天]` : `${dateVal} (${dayName})`;
-                    singleOptionsHTML += `<option value="${dateVal}" ${isToday ? 'selected' : ''}>${labelText}</option>`;
+                    singleOptionsHTML += `<option value="${dateVal}">${labelText}</option>`;
                 }
                 singlePrintDateSelect.innerHTML = singleOptionsHTML;
             }
@@ -2776,12 +2776,17 @@
             const infoEl = document.getElementById('single_print_client_info');
             if (infoEl) infoEl.innerText = `${client.name} (${client.code}) - ${client.product || '未填商品'}`;
 
-            // 同步主治醫師選單
+            // 重設回診檢查日期為未選擇
+            const dateSelect = document.getElementById('single_print_date_select');
+            if (dateSelect) dateSelect.value = "";
+
+            // 同步主治醫師選單並預設為未選擇
             const drSelect = document.getElementById('single_print_dr_select');
             if (drSelect) {
-                let docHTML = "";
+                let docHTML = `<option value="" selected>未選擇</option>`;
                 doctorList.forEach(dr => { docHTML += `<option value="${dr}">${dr}</option>`; });
                 drSelect.innerHTML = docHTML;
+                drSelect.value = "";
             }
 
             // 開啟確認彈窗
@@ -2802,6 +2807,9 @@
 
             const dateVal = document.getElementById('single_print_date_select').value;
             const drVal = document.getElementById('single_print_dr_select').value;
+
+            if (!dateVal) { alert("請選擇回診檢查日期！"); return; }
+            if (!drVal) { alert("請選擇主治醫師！"); return; }
 
             const printWrapper = document.getElementById('print-page-wrapper');
             printWrapper.innerHTML = generateChecklistHTML(client, dateVal, drVal);
@@ -3388,7 +3396,7 @@
         }
 
         function updateDropdowns() {
-            let docHTML = "";
+            let docHTML = `<option value="" selected>未選擇</option>`;
             doctorList.forEach(dr => { docHTML += `<option value="${dr}">${dr}</option>`; });
             const bDr = document.getElementById('bulk_print_dr_select');
             if (bDr) bDr.innerHTML = docHTML;
@@ -3940,6 +3948,28 @@
             applyAllFilters();
         }
 
+        // ★ 搜尋專用觸發函式：搜尋執行時，強制第一步先將所有快篩鈕恢復為「全」
+        function onSearchTrigger() {
+            currentMonthFilter = 'all';
+            currentDayFilter = 'all';
+            currentProductFilter = 'all';
+
+            document.querySelectorAll('#month-btn-group .btn-filter-month').forEach(b => b.classList.remove('active'));
+            const monthAll = document.querySelector('#month-btn-group .btn-filter-all');
+            if (monthAll) monthAll.classList.add('active');
+
+            document.querySelectorAll('#day-btn-group .btn-filter-day').forEach(b => b.classList.remove('active'));
+            const dayAll = document.querySelector('#day-btn-group .btn-filter-day');
+            if (dayAll) dayAll.classList.add('active');
+
+            document.querySelectorAll('#product-filter-container .btn-filter-prod').forEach(b => b.classList.remove('active'));
+            const prodAll = document.querySelector('#product-filter-container .btn-filter-all');
+            if (prodAll) prodAll.classList.add('active');
+
+            currentPage = 1;
+            applyAllFilters();
+        }
+
         function buildProductFilterButtons() {
             const container = document.getElementById('product-filter-container');
             if (!container) return;
@@ -4009,6 +4039,25 @@
         function applyAllFilters() {
             const searchElem = document.getElementById('searchInput');
             const query = searchElem ? String(searchElem.value || '').toLowerCase().trim() : '';
+
+            // 若有輸入文字搜尋，且快篩鈕有操作過，先重設快篩鈕回「全」
+            if (query && (currentMonthFilter !== 'all' || currentDayFilter !== 'all' || currentProductFilter !== 'all')) {
+                currentMonthFilter = 'all';
+                currentDayFilter = 'all';
+                currentProductFilter = 'all';
+
+                document.querySelectorAll('#month-btn-group .btn-filter-month').forEach(b => b.classList.remove('active'));
+                const mAll = document.querySelector('#month-btn-group .btn-filter-all');
+                if (mAll) mAll.classList.add('active');
+
+                document.querySelectorAll('#day-btn-group .btn-filter-day').forEach(b => b.classList.remove('active'));
+                const dAll = document.querySelector('#day-btn-group .btn-filter-all');
+                if (dAll) dAll.classList.add('active');
+
+                document.querySelectorAll('#product-filter-container .btn-filter-prod').forEach(b => b.classList.remove('active'));
+                const pAll = document.querySelector('#product-filter-container .btn-filter-all');
+                if (pAll) pAll.classList.add('active');
+            }
 
             const hideStopCheckbox = document.getElementById('hideStopCheckbox');
             const hideStop = hideStopCheckbox ? hideStopCheckbox.checked : false;
@@ -4496,14 +4545,22 @@
             const summary = document.getElementById('table-summary');
             if (summary) summary.innerHTML = `<span class="pulse-text">⏳ 連線雲端資料庫中...</span>`;
 
-            // ★ 表格中央同步顯示專屬讀取動畫，避免空白或死板
+            // ★ 表格中央同步顯示專屬讀取動畫與即時進度條
+            const screenViewEl = document.getElementById('screen-view');
+            if (screenViewEl) {
+                screenViewEl.style.pointerEvents = 'none';
+                screenViewEl.style.opacity = '0.55';
+            }
             const tbodyInit = document.getElementById('customerTableBody');
             if (tbodyInit) {
                 tbodyInit.innerHTML = `
                     <tr>
-                        <td colspan="${columnOrder.length}" style="padding: 50px 20px; text-align: center; background: #fafafa;">
+                        <td colspan="${columnOrder.length}" style="padding: 45px 20px; text-align: center; background: #fafafa;">
                             <div class="table-loading-spinner"></div>
-                            <div class="pulse-text" style="font-size: 13.5px; letter-spacing: 0.5px;">正在同步雲端資料庫資料，請稍候...</div>
+                            <div id="syncProgressText" class="pulse-text" style="font-size: 13.5px; letter-spacing: 0.5px; margin-bottom: 10px;">正在同步雲端資料庫資料，請稍候...</div>
+                            <div style="width: 260px; height: 8px; background: #e2e8f0; border-radius: 4px; margin: 0 auto; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                                <div id="syncProgressBar" style="width: 5%; height: 100%; background: linear-gradient(90deg, #5a8264, #27ae60); transition: width 0.2s ease;"></div>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -4513,10 +4570,56 @@
                 await loadSettings();
                 checkGlobalAuth();
 
-                // ★ 透過後端 Worker 代理撈取資料，保護連線指令與金鑰
+                // ★ 雲端精準位元組串流進度追蹤（直接讀取 Worker 回傳的真實總大小）
                 const custRes = await fetch(`${API_BASE_URL}/api/customers`);
                 if (custRes.ok) {
-                    const data = await custRes.json();
+                    const serverTotal = custRes.headers.get('X-Total-Bytes') || custRes.headers.get('content-length');
+                    let expectedTotalBytes = serverTotal ? parseInt(serverTotal, 10) : 0;
+
+                    // 備用防線：萬一標頭未取到，以 7MB 兜底保證不報錯
+                    if (!expectedTotalBytes || expectedTotalBytes <= 0) {
+                        expectedTotalBytes = 7340032;
+                    }
+
+                    let receivedBytes = 0;
+                    let chunks = [];
+                    const pBar = document.getElementById('syncProgressBar');
+                    const pText = document.getElementById('syncProgressText');
+
+                    if (custRes.body) {
+                        const reader = custRes.body.getReader();
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            chunks.push(value);
+                            receivedBytes += value.length;
+
+                            if (receivedBytes > expectedTotalBytes) {
+                                expectedTotalBytes = receivedBytes;
+                            }
+
+                            const percent = Math.min(99, Math.max(1, Math.round((receivedBytes / expectedTotalBytes) * 100)));
+                            const curMB = (receivedBytes / (1024 * 1024)).toFixed(2);
+                            const totalMB = (expectedTotalBytes / (1024 * 1024)).toFixed(2);
+
+                            if (pBar) pBar.style.width = `${percent}%`;
+                            if (pText) pText.innerText = `同步雲端資料中... ${percent}% (${curMB} MB / ${totalMB} MB)`;
+                        }
+                    }
+
+                    if (pBar) pBar.style.width = '100%';
+                    if (pText) pText.innerText = '100% 資料解析完成，即將呈現...';
+
+                    // 合併二進位串流並解碼為 JSON
+                    let allChunks = new Uint8Array(receivedBytes);
+                    let position = 0;
+                    for (let chunk of chunks) {
+                        allChunks.set(chunk, position);
+                        position += chunk.length;
+                    }
+                    const jsonText = new TextDecoder("utf-8").decode(allChunks);
+                    const data = JSON.parse(jsonText);
+
                     if (data && data.length > 0) {
                         data.forEach(item => {
                             item.birthday = formatExcelDate(item.birthday, true);
@@ -4598,6 +4701,13 @@
 
             buildProductFilterButtons();
             applyAllFilters();
+
+            // 解除同步時的反灰與鎖定操作
+            const screenViewDone = document.getElementById('screen-view');
+            if (screenViewDone) {
+                screenViewDone.style.pointerEvents = 'auto';
+                screenViewDone.style.opacity = '1';
+            }
 
             if (typeof loadUnboundRequests === 'function') {
                 loadUnboundRequests();
@@ -5004,6 +5114,9 @@
             const dateVal = document.getElementById('bulk_print_date_select').value;
             const drVal = document.getElementById('bulk_print_dr_select').value;
 
+            if (!dateVal) { alert("請選擇回診檢查日期！"); return; }
+            if (!drVal) { alert("請選擇主治醫師！"); return; }
+
             if (bulkPrintList.length === 0) {
                 alert("請先刷入欲列印的客戶！");
                 return;
@@ -5309,10 +5422,14 @@
                             <td style="font-weight: bold; text-align: center; font-size: 13pt;" rowspan="2">
                                 ${applyVars(matchedTpl.vaTitle || 'VA')}
                             </td>
-                            <td style="padding: 4px 6px; font-size: 11pt; height: 40px; text-align: left;"><b>OD</b></td>
+                            <td style="padding: 4px 6px; font-size: 11pt; height: 40px; text-align: left; vertical-align: middle;">
+                                <b>OD</b>${wearMode === 'OS 配戴' ? '<div style="font-size: 7.5pt; color: #718096; font-weight: normal; margin-top: 1px; line-height: 1.1;">無配戴</div>' : ''}
+                            </td>
                         </tr>
                         <tr style="height: 45px;">
-                            <td style="padding: 4px 6px; font-size: 11pt; height: 40px; text-align: left;"><b>OS</b></td>
+                            <td style="padding: 4px 6px; font-size: 11pt; height: 40px; text-align: left; vertical-align: middle;">
+                                <b>OS</b>${wearMode === 'OD 配戴' ? '<div style="font-size: 7.5pt; color: #718096; font-weight: normal; margin-top: 1px; line-height: 1.1;">無配戴</div>' : ''}
+                            </td>
                         </tr>
                         <tr style="height: 44px;">
                             <td style="font-weight: bold; text-align: center; font-size: 11pt;">
