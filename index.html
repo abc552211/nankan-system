@@ -4518,64 +4518,99 @@
             }
         }
         // ==========================================
-        // 閒置無感資料庫同步引擎 (在無未儲存修改時自動校正)
+        // 閒置無感資料庫同步引擎 (前景 12 秒 / 背景 60 秒智慧變頻)
         // ==========================================
         let silentSyncTimer = null;
+        let isSyncingNow = false;
+
+        async function triggerSilentSync() {
+            // 1. 若上一次請求尚未結束、或有人員未儲存的紅燈修改，暫緩執行
+            if (isSyncingNow || hasUnsavedChanges) return;
+
+            // 2. 若操作者正在格子內編輯打字，禮讓暫緩
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) {
+                return;
+            }
+
+            isSyncingNow = true;
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/customers`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) return;
+
+                let isAnyPhotoOrDataChanged = false;
+
+                data.forEach(item => {
+                    item.birthday = formatExcelDate(item.birthday, true);
+                    item.lastVisit = formatExcelDate(item.lastVisit, false);
+                    item.alCheckDate = formatExcelDate(item.alCheckDate, false);
+                    item.odChangeDate = formatExcelDate(item.odChangeDate, false);
+                    item.osChangeDate = formatExcelDate(item.osChangeDate, false);
+                    item.firstPickup = formatExcelDate(item.firstPickup, false);
+                    item.serviceDate = formatExcelDate(item.serviceDate, false);
+                    item.contactDate = formatExcelDate(item.contactDate, false);
+                    item.od_lens_photo = item.od_lens_photo || '';
+                    item.os_lens_photo = item.os_lens_photo || '';
+                    if (!item.line_uids) {
+                        item.line_uids = [];
+                    } else if (typeof item.line_uids === 'string') {
+                        item.line_uids = item.line_uids.replace(/[\{\}\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                    calculateDynamicFields(item);
+
+                    // 比對鏡片照片是否有新增、變更或刪除
+                    const local = rawClients.find(c => c.code === item.code);
+                    if (local) {
+                        if (local.od_lens_photo !== item.od_lens_photo || local.os_lens_photo !== item.os_lens_photo) {
+                            isAnyPhotoOrDataChanged = true;
+                        }
+                    }
+                });
+
+                // 若資料筆數不同或照片有變動，原地無感更新表格
+                if (data.length !== rawClients.length || isAnyPhotoOrDataChanged) {
+                    rawClients = data;
+                    if (typeof createDataSnapshot === 'function') {
+                        createDataSnapshot(rawClients);
+                    }
+                    const savedPage = currentPage;
+                    applyAllFilters();
+                    currentPage = savedPage;
+                    renderTableWithPagination();
+                    console.log("⚡ 偵測到手機版照片更新，已即時同步到畫面上！");
+                }
+            } catch (err) {
+                console.warn("背景自動對齊暫時連線異常：", err);
+            } finally {
+                isSyncingNow = false;
+            }
+        }
 
         function startAutoSilentSync() {
-            if (silentSyncTimer) clearInterval(silentSyncTimer);
-            
-            // 每 10 分鐘 (600,000 毫秒) 執行一次
-            silentSyncTimer = setInterval(async () => {
-                // 1. 若人員正在編輯或有尚未儲存的修改，絕對不重拉資料
-                if (hasUnsavedChanges) {
-                    console.log("偵測到有人員未儲存修改，略過背景同步。");
-                    return;
-                }
+            if (silentSyncTimer) clearTimeout(silentSyncTimer);
 
-                // 2. 靜態自 Supabase 讀取最新客戶狀態 (同樣解除 1000 筆限制)
-                if (!supabaseClient) return;
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('customers')
-                        .select('*')
-                        .range(0, 4999);
+            function scheduleNext(customDelay) {
+                // 前景在看時 15 秒對齊一次；縮小或在其他分頁時拉長至 60 秒
+                const delay = customDelay !== undefined ? customDelay : (document.hidden ? 60 * 1000 : 15 * 1000);
+                silentSyncTimer = setTimeout(async () => {
+                    await triggerSilentSync();
+                    scheduleNext();
+                }, delay);
+            }
 
-                    if (!error && data && data.length > 0) {
-                        data.forEach(item => {
-                            item.birthday = formatExcelDate(item.birthday, true);
-                            item.lastVisit = formatExcelDate(item.lastVisit, false);
-                            item.alCheckDate = formatExcelDate(item.alCheckDate, false);
-                            item.odChangeDate = formatExcelDate(item.odChangeDate, false);
-                            item.osChangeDate = formatExcelDate(item.osChangeDate, false);
-                            item.firstPickup = formatExcelDate(item.firstPickup, false);
-                            item.serviceDate = formatExcelDate(item.serviceDate, false);
-                            item.contactDate = formatExcelDate(item.contactDate, false);
-                            item.od_lens_photo = item.od_lens_photo || '';
-                            item.os_lens_photo = item.os_lens_photo || '';
-                            if (!item.line_uids) {
-                                item.line_uids = [];
-                            } else if (typeof item.line_uids === 'string') {
-                                item.line_uids = item.line_uids.replace(/[\{\}\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
-                            }
-                            calculateDynamicFields(item);
-                        });
-
-                        rawClients = data;
-                        // 重新對齊快照，確保比對基準永遠是最新狀態
-                        if (typeof createDataSnapshot === 'function') {
-                            createDataSnapshot(rawClients);
-                        }
-                        
-                        // 平滑刷新表格，不跳頁、不白屏
-                        applyAllFilters();
-                        console.log("✅ 系統已於背景完成與雲端資料庫最新對齊。");
-                    }
-                } catch (err) {
-                    console.warn("背景同步暫時失敗：", err);
-                }
-            }, 10 * 60 * 1000); 
+            // ★ 核心修復：首次開啟網頁時，刻意延後 30 秒才開跑，把所有網路頻寬 100% 留給第一次載入！
+            scheduleNext(30 * 1000);
         }
+
+        // 當使用者切回此視窗分頁時，若頁面已開啟超過 20 秒才觸發對齊，避免剛開分頁就卡住
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && rawClients.length > 0) {
+                triggerSilentSync();
+                startAutoSilentSync();
+            }
+        });
 
         // =========================================================
         // Supabase 資料操作：讀取、儲存、新增、Excel匯入
