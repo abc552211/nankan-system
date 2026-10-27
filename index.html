@@ -1202,6 +1202,25 @@
             0%, 100% { opacity: 0.5; }
             50% { opacity: 1; }
         }
+        /* 儲存至雲端按鈕閃爍紅提示動畫 */
+        .btn-pulse-danger {
+            background-color: #ef4444 !important;
+            color: #ffffff !important;
+            animation: btnPulseRed 1s infinite alternate !important;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8) !important;
+        }
+        @keyframes btnPulseRed {
+            0% {
+                background-color: #ef4444;
+                box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+                transform: scale(1);
+            }
+            100% {
+                background-color: #b91c1c;
+                box-shadow: 0 0 14px rgba(239, 68, 68, 0.95);
+                transform: scale(1.03);
+            }
+        }
     </style>
 </head>
 
@@ -1344,7 +1363,7 @@
 
 
                 <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                    <button class="btn btn-success" onclick="saveAllChanges()">儲存至雲端</button>
+                    <button id="btnSaveAllChanges" class="btn btn-success" onclick="saveAllChanges()">儲存至雲端</button>
                     <button class="btn btn-outline-secondary" onclick="openSmsModal()">簡訊作業</button>
                     <a href="https://message0088.abc552211.workers.dev" target="_blank" style="text-decoration: none;">
                         <button type="button"
@@ -2292,11 +2311,18 @@
                 <span style="font-size: 12px; color: #64748b;">家長於 LINE 填寫但系統查無資料之紀錄，可在此手動指派對應客戶</span>
             </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <div style="font-size:13px; color:#475569;">
-                    提示：點擊「手動關聯」可將該家長 LINE UID 綁定至正確客戶編號，家長再次開啟 LIFF 即可看到資料。
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span style="font-size:13px; font-weight:bold; color:#334155;">狀態篩選：</span>
+                    <div class="filter-btn-group" id="unbound-status-filter-group" style="display:inline-flex; gap:4px;">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="setUnboundStatusFilter('all', this)" style="padding:3px 10px; font-size:12px;">全部</button>
+                        <button type="button" class="btn btn-sm btn-danger active" onclick="setUnboundStatusFilter('pending', this)" style="padding:3px 10px; font-size:12px; font-weight:bold;">⚠️ 待處理 (未關聯)</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="setUnboundStatusFilter('resolved', this)" style="padding:3px 10px; font-size:12px;">已手動關聯</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="setUnboundStatusFilter('ignored', this)" style="padding:3px 10px; font-size:12px;">已忽略</button>
+                    </div>
+                    <input type="text" id="unboundSearchInput" class="form-control" placeholder="搜尋姓名、電話或暱稱..." style="width:160px; font-size:12px; padding:3px 8px;" oninput="renderUnboundTable()">
                 </div>
-                <button class="btn btn-primary" onclick="loadUnboundRequests()">重新整理待綁定清單</button>
+                <button class="btn btn-primary" style="font-size:12.5px; padding:4px 12px;" onclick="loadUnboundRequests()">重新整理待綁定清單</button>
             </div>
 
             <div class="table-container" style="max-height: 500px;">
@@ -2728,9 +2754,9 @@
             }
             if (bulkSelect) bulkSelect.innerHTML = futureOptionsHTML;
 
-            // 2. 刷槍更新之回診日：包含今天往前5天 (今天 ~ 過去5天)
+            // 2. 刷槍更新之回診日：預設請選擇，包含今天往前5天 (今天 ~ 過去5天)
             const batchSelect = document.getElementById('batch_visitDate_select');
-            let pastOptionsHTML = "";
+            let pastOptionsHTML = `<option value="" selected>請選擇</option>`;
             for (let i = 0; i <= 5; i++) {
                 const target = new Date();
                 target.setDate(now.getDate() - i);
@@ -2811,12 +2837,27 @@
             if (!dateVal) { alert("請選擇回診檢查日期！"); return; }
             if (!drVal) { alert("請選擇主治醫師！"); return; }
 
+            const btnPrint = document.querySelector('#singlePrintConfirmModal .btn-success');
+            const origPrintText = btnPrint ? btnPrint.innerText : '確定列印';
+            if (btnPrint) {
+                btnPrint.disabled = true;
+                btnPrint.innerText = '⏳ 處理中...';
+                btnPrint.style.opacity = '0.7';
+                btnPrint.style.cursor = 'not-allowed';
+            }
+
             const printWrapper = document.getElementById('print-page-wrapper');
             printWrapper.innerHTML = generateChecklistHTML(client, dateVal, drVal);
 
             closeSinglePrintModal();
             // 自動儲存單筆回診列印紀錄 (僅限 OK 塑型片)
             savePrintRecordToDatabase([client], dateVal, drVal);
+            if (btnPrint) {
+                btnPrint.disabled = false;
+                btnPrint.innerText = origPrintText;
+                btnPrint.style.opacity = '';
+                btnPrint.style.cursor = '';
+            }
             window.print();
         }
 
@@ -4224,13 +4265,16 @@
             if (!tbody) return;
             tbody.innerHTML = '';
             const summary = document.getElementById('table-summary');
+            const saveBtn = document.getElementById('btnSaveAllChanges');
             if (summary) {
                 if (hasUnsavedChanges) {
                     summary.innerText = `共符合 ${currentDisplay.length} 筆資料 (⚠️ 有尚未儲存的修改)`;
                     summary.style.color = '#d97706';
+                    if (saveBtn) saveBtn.classList.add('btn-pulse-danger');
                 } else {
                     summary.innerText = `共符合 ${currentDisplay.length} 筆資料`;
                     summary.style.color = '#2c3e50';
+                    if (saveBtn) saveBtn.classList.remove('btn-pulse-danger');
                 }
             }
 
@@ -4452,13 +4496,15 @@
             editHistory.push({ code, key, oldVal });
             if (editHistory.length > 50) editHistory.shift();
 
-            // 標記為有未儲存變更，並在介面顯示提示
+            // 標記為有未儲存變更，並在介面顯示提示與閃爍紅按鈕
             hasUnsavedChanges = true;
             const summary = document.getElementById('table-summary');
             if (summary && !summary.innerText.includes('⚠️')) {
                 summary.innerText += ' (⚠️ 有尚未儲存至雲端的修改)';
                 summary.style.color = '#d97706';
             }
+            const saveBtn = document.getElementById('btnSaveAllChanges');
+            if (saveBtn) saveBtn.classList.add('btn-pulse-danger');
         }
 
         function undoEdit() {
@@ -4731,6 +4777,15 @@
 
             if (!confirm(`系統偵測到共【${changedClients.length}】筆客戶有修改，是否立即同步更新至雲端？`)) return;
 
+            const btnSave = document.getElementById('btnSaveAllChanges');
+            const originalSaveText = btnSave ? btnSave.innerText : '儲存至雲端';
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.innerText = '⏳ 儲存中...';
+                btnSave.style.opacity = '0.7';
+                btnSave.style.cursor = 'not-allowed';
+            }
+
             const summary = document.getElementById('table-summary');
             if (summary) summary.innerHTML = `<span class="pulse-text">⏳ 資料分批同步至雲端中，請稍候...</span>`;
 
@@ -4762,6 +4817,8 @@
                 // 5. 全部批次成功後，才刷新快照與變更旗標
                 createDataSnapshot(rawClients);
                 hasUnsavedChanges = false;
+                const saveBtn = document.getElementById('btnSaveAllChanges');
+                if (saveBtn) saveBtn.classList.remove('btn-pulse-danger');
                 applyAllFilters();
 
                 alert(`🎉 成功同步！已分批將 ${changedClients.length} 筆客戶完整更新至雲端。`);
@@ -4772,6 +4829,13 @@
                     summary.style.color = '#ef4444';
                 }
                 alert("儲存至雲端失敗！\n\n原因：" + (err.message || err) + "\n\n提示：本機異動尚未遺失，請確認網路連線正常後再次點擊「儲存至雲端」。");
+            } finally {
+                if (btnSave) {
+                    btnSave.disabled = false;
+                    btnSave.innerText = originalSaveText;
+                    btnSave.style.opacity = '';
+                    btnSave.style.cursor = '';
+                }
             }
         }
 
@@ -4790,6 +4854,15 @@
             if (isExist) { 
                 alert(`編號「${code}」已存在！`); 
                 return; 
+            }
+
+            const btnAdd = document.querySelector('#tab-new-client .btn-primary');
+            const origAddText = btnAdd ? btnAdd.innerText : '確認新增客戶';
+            if (btnAdd) {
+                btnAdd.disabled = true;
+                btnAdd.innerText = '⏳ 新增中，請稍候...';
+                btnAdd.style.opacity = '0.7';
+                btnAdd.style.cursor = 'not-allowed';
             }
 
             const fdVal = document.getElementById('new_fdModify')?.value || '';
@@ -4857,6 +4930,13 @@
             } catch (err) {
                 console.error("新增失敗：", err);
                 alert("新增客戶失敗！原因：" + (err.message || err));
+            } finally {
+                if (btnAdd) {
+                    btnAdd.disabled = false;
+                    btnAdd.innerText = origAddText;
+                    btnAdd.style.opacity = '';
+                    btnAdd.style.cursor = '';
+                }
             }
         }
 
@@ -5728,6 +5808,11 @@
             }
 
             const vDate = document.getElementById('batch_visitDate_select').value.trim();
+            if (!vDate) {
+                alert("請先選擇「欲更新之回診日」！");
+                document.getElementById('batch_visitDate_select').focus();
+                return;
+            }
             const logBox = document.getElementById('scanLog');
             let successCount = 0;
 
@@ -6000,6 +6085,23 @@
         // LINE 待綁定維護邏輯 (安全 Worker 後端代理版)
         // =========================================================
         let unboundList = [];
+        let currentUnboundStatusFilter = 'pending'; // 預設直接篩出未關聯的「待處理」名單
+
+        function setUnboundStatusFilter(status, btn) {
+            currentUnboundStatusFilter = status;
+            const group = document.getElementById('unbound-status-filter-group');
+            if (group) {
+                group.querySelectorAll('button').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.fontWeight = 'normal';
+                });
+            }
+            if (btn) {
+                btn.classList.add('active');
+                btn.style.fontWeight = 'bold';
+            }
+            renderUnboundTable();
+        }
 
         async function loadUnboundRequests() {
             const tbody = document.getElementById('unboundTableBody');
@@ -6037,13 +6139,34 @@
                 }
             }
 
-            if (unboundList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #94a3b8;">目前無任何待綁定請求紀錄。</td></tr>`;
+            // 依據篩選狀態與關鍵字過濾名單
+            const keyword = (document.getElementById('unboundSearchInput')?.value || '').trim().toLowerCase();
+            let displayList = unboundList.filter(req => {
+                // 1. 狀態篩選
+                if (currentUnboundStatusFilter !== 'all' && req.status !== currentUnboundStatusFilter) {
+                    return false;
+                }
+                // 2. 關鍵字搜尋過濾
+                if (keyword) {
+                    const name = (req.name || '').toLowerCase();
+                    const phone = (req.phone || '').toLowerCase();
+                    const liffName = (req.liff_name || '').toLowerCase();
+                    const uid = (req.uid || '').toLowerCase();
+                    const code = (req.matched_code || '').toLowerCase();
+                    if (!name.includes(keyword) && !phone.includes(keyword) && !liffName.includes(keyword) && !uid.includes(keyword) && !code.includes(keyword)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            if (displayList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" style="padding: 20px; color: #94a3b8;">查無符合條件的待綁定資料。</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = '';
-            unboundList.forEach((req, idx) => {
+            displayList.forEach((req, idx) => {
                 const tr = document.createElement('tr');
                 if (req.status === 'resolved') tr.style.opacity = '0.6';
 
@@ -6169,6 +6292,9 @@
                 return;
             }
 
+            const btnBind = document.querySelector('#manualBindModal .btn-success');
+            const origBindText = btnBind ? btnBind.innerText : '確認關聯';
+
             const uid = currentBindReq.uid;
             const reqId = currentBindReq.id;
             let client = rawClients.find(c => (c.code || '').toUpperCase() === targetCode);
@@ -6176,6 +6302,13 @@
             if (client) {
                 // 1. 現有客戶：關聯 UID
                 if (!confirm(`確定要將此 LINE 帳號綁定至現有客戶【${client.name} (${client.code})】嗎？`)) return;
+
+                if (btnBind) {
+                    btnBind.disabled = true;
+                    btnBind.innerText = '⏳ 關聯綁定中...';
+                    btnBind.style.opacity = '0.7';
+                    btnBind.style.cursor = 'not-allowed';
+                }
 
                 try {
                     let currentUids = client.line_uids || [];
@@ -6209,10 +6342,24 @@
                 } catch (err) {
                     console.error("手動綁定失敗：", err);
                     alert("手動綁定失敗：" + err.message);
+                } finally {
+                    if (btnBind) {
+                        btnBind.disabled = false;
+                        btnBind.innerText = origBindText;
+                        btnBind.style.opacity = '';
+                        btnBind.style.cursor = '';
+                    }
                 }
             } else {
                 // 2. 查無編號（新客戶）
                 if (!confirm(`系統中尚無編號【${targetCode}】。\n是否自動以編號【${targetCode}】建立【${currentBindReq.name}】之客戶資料並直接完成 LINE 綁定？`)) return;
+
+                if (btnBind) {
+                    btnBind.disabled = true;
+                    btnBind.innerText = '⏳ 建立並綁定中...';
+                    btnBind.style.opacity = '0.7';
+                    btnBind.style.cursor = 'not-allowed';
+                }
 
                 const newObj = {
                     code: targetCode,
@@ -6263,6 +6410,13 @@
                 } catch (err) {
                     console.error("建立客戶並關聯失敗：", err);
                     alert("建立客戶並關聯失敗：" + err.message);
+                } finally {
+                    if (btnBind) {
+                        btnBind.disabled = false;
+                        btnBind.innerText = origBindText;
+                        btnBind.style.opacity = '';
+                        btnBind.style.cursor = '';
+                    }
                 }
             }
         }
